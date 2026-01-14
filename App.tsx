@@ -19,7 +19,7 @@ import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminBarbers from './screens/admin/AdminBarbers';
 import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { 
   Loader2,
   ShieldCheck,
@@ -53,10 +53,34 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleAuthUser = async (supabaseUser: SupabaseUser) => {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', supabaseUser.id)
+      .single();
+      
+    const fullUser = { 
+      id: supabaseUser.id,
+      email: supabaseUser.email || '',
+      role: (profile?.role as any) || 'customer' 
+    } as User;
+    
+    setUser(fullUser);
+    db.setActiveUser(fullUser);
+    syncAllData(fullUser.id, fullUser.role);
+
+    if (fullUser.role === 'barber') {
+      const barbers = await db.getBarbers();
+      const bProf = barbers.find(b => b.userId === fullUser.id);
+      setBarberProfile(bProf || null);
+    }
+  };
+
   useEffect(() => {
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session?.user) {
         await handleAuthUser(session.user);
       }
       setIsInitializing(false);
@@ -65,7 +89,7 @@ const App: React.FC = () => {
     initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
-      if (event === 'SIGNED_IN' && session) {
+      if (event === 'SIGNED_IN' && session?.user) {
         await handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -77,7 +101,7 @@ const App: React.FC = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [syncAllData]);
 
   useEffect(() => {
     if (!user) return;
@@ -108,30 +132,6 @@ const App: React.FC = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [user, barberProfile, lang]);
-
-  const handleAuthUser = async (supabaseUser: any) => {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', supabaseUser.id)
-      .single();
-      
-    const fullUser = { 
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      role: (profile?.role as any) || 'customer' 
-    } as User;
-    
-    setUser(fullUser);
-    db.setActiveUser(fullUser);
-    syncAllData(fullUser.id, fullUser.role);
-
-    if (fullUser.role === 'barber') {
-      const barbers = await db.getBarbers();
-      const bProf = barbers.find(b => b.userId === fullUser.id);
-      setBarberProfile(bProf || null);
-    }
-  };
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -193,7 +193,7 @@ const App: React.FC = () => {
     }
 
     if (user.role === 'barber') {
-      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser(user)} />;
+      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser(user as any)} />;
       if (!barberProfile.approved) return (
         <div className="flex flex-col items-center justify-center text-center p-10 min-h-[70vh] space-y-12 animate-lux-fade">
           <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">{lang === 'hr' ? 'Račun na čekanju' : 'Pending Approval'}</h2>
@@ -205,7 +205,7 @@ const App: React.FC = () => {
         case 'leaderboard': return <LeaderboardScreen lang={lang} />;
         case 'schedule': return <BarberAvailability lang={lang} barberId={barberProfile.id} />;
         case 'services': return <BarberServices lang={lang} barberId={barberProfile.id} />;
-        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser(user)} />;
+        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser(user as any)} />;
         default: return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
       }
     }

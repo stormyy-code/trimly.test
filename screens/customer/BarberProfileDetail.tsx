@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { db } from '../../store/mockDatabase';
 import { BarberProfile, Service, Booking, User, WorkingDay, BreakTime } from '../../types';
@@ -22,6 +23,17 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
+
+  // If barber is not found, we shouldn't render or access properties
+  if (!barber) {
+    return (
+      <div className="h-screen bg-black flex items-center justify-center p-10 text-center">
+        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px]">Barber not found</p>
+        <Button onClick={onBack} className="mt-4">Back</Button>
+      </div>
+    );
+  }
+
   const services = db.getServicesSync().filter(s => s.barberId === barberId);
   const reviews = db.getReviewsSync().filter(r => r.barberId === barberId);
   const allBookings = db.getBookingsSync();
@@ -30,7 +42,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
   const avgRating = reviews.length ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : "4.8";
 
-  // Dinamičko generiranje termina na temelju brijačevog intervala i pauza
   const timeSlots = useMemo(() => {
     if (!selectedDate || !barber) return [];
 
@@ -40,12 +51,11 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
     if (!dayConfig || !dayConfig.enabled) return [];
 
-    const slots = [];
+    const slots: { time: string, isTaken: boolean }[] = [];
     const interval = barber.slotInterval || 45;
     
-    // Pomoćne funkcije za vrijeme
-    const timeToMinutes = (t: string) => {
-      const [h, m] = t.split(':').map(Number);
+    const timeToMinutes = (tStr: string) => {
+      const [h, m] = tStr.split(':').map(Number);
       return h * 60 + m;
     };
 
@@ -64,11 +74,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     while (current + interval <= end) {
       const timeStr = minutesToTime(current);
       
-      // Provjera preklapanja s pauzama
       const isBreak = dayConfig.breaks?.some(brk => {
         const bStart = timeToMinutes(brk.startTime);
         const bEnd = timeToMinutes(brk.endTime);
-        // Termin je u pauzi ako počinje unutar pauze ili ako pauza počinje unutar termina
         return (current >= bStart && current < bEnd);
       });
 
@@ -99,14 +107,14 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   }, [lang]);
 
   const handleBook = async () => {
-    if (!selectedService || !selectedDate || !selectedTime) return;
+    if (!selectedService || !selectedDate || !selectedTime || !barber) return;
     setLoading(true);
 
     const newBooking: Booking = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       customerId: user.id,
       customerEmail: user.email,
-      barberId: barber!.id,
+      barberId: barber.id,
       serviceId: selectedService.id,
       serviceName: selectedService.name,
       date: selectedDate,
@@ -144,7 +152,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   return (
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
       <div className="relative h-[400px] w-full bg-zinc-900">
-        <img src={barber?.profilePicture} className="w-full h-full object-cover grayscale brightness-50" alt="" />
+        <img src={barber.profilePicture} className="w-full h-full object-cover grayscale brightness-50" alt="" />
         <div className="absolute top-12 left-6 right-6 flex justify-between items-center z-20">
           <button onClick={onBack} className="w-12 h-12 bg-black/80 premium-blur border border-white/10 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-all">
             <ArrowLeft size={22} className="text-white" />
@@ -162,13 +170,13 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           <div className="p-3 bg-white/5 border border-white/10 rounded-3xl shadow-2xl"><UserCircle2 size={32} className="text-[#D4AF37]" /></div>
           <div className="flex justify-between items-end w-full">
             <div className="space-y-4">
-              <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none">{barber?.fullName}</h1>
+              <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none">{barber.fullName}</h1>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="gold"><Star size={10} className="mr-1 fill-current" /> {avgRating}</Badge>
                 <Badge variant="neutral"><Scissors size={10} className="mr-1" /> {totalCuts} šišanja</Badge>
               </div>
             </div>
-            <div className="bg-[#D4AF37] text-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest">{barber?.workMode}</div>
+            <div className="bg-[#D4AF37] text-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest">{barber.workMode}</div>
           </div>
         </div>
 
@@ -182,9 +190,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
              <section className="space-y-4">
                 <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><MapPin size={14} className="text-[#D4AF37]" /> LOKACIJA</div>
                 <Card className="p-6 bg-zinc-900/40 border-white/5">
-                  <p className="text-white font-black text-sm italic mb-4">{barber?.address}</p>
+                  <p className="text-white font-black text-sm italic mb-4">{barber.address}</p>
                   <div className="w-full h-48 bg-zinc-950 rounded-2xl overflow-hidden relative border border-white/5">
-                    <img src="https://images.unsplash.com/photo-1549414574-8555e0546960?q=80&w=600" className="w-full h-full object-cover grayscale opacity-20" />
+                    <img src="https://images.unsplash.com/photo-1549414574-8555e0546960?q=80&w=600" className="w-full h-full object-cover grayscale opacity-20" alt="Map" />
                     <div className="absolute inset-0 flex items-center justify-center">
                        <Navigation size={24} className="text-[#D4AF37] animate-bounce" />
                     </div>
@@ -193,14 +201,14 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
              </section>
              <section className="space-y-4">
                 <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Info size={14} className="text-[#D4AF37]" /> BIO</div>
-                <p className="text-zinc-400 leading-relaxed italic text-xs font-bold px-6 py-5 bg-zinc-950 rounded-3xl border border-white/5">{barber?.bio}</p>
+                <p className="text-zinc-400 leading-relaxed italic text-xs font-bold px-6 py-5 bg-zinc-950 rounded-3xl border border-white/5">{barber.bio}</p>
              </section>
           </div>
         ) : (
           <div className="space-y-4 animate-lux-fade">
             {services.map(s => (
               <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-6 flex gap-6 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl' : 'border-white/5'}`}>
-                <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0"><img src={s.imageUrl} className="w-full h-full object-cover grayscale brightness-90" /></div>
+                <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0"><img src={s.imageUrl} className="w-full h-full object-cover grayscale brightness-90" alt={s.name} /></div>
                 <div className="flex-1">
                   <h4 className="font-black text-lg uppercase tracking-tighter text-white italic">{s.name}</h4>
                   <div className="flex items-center gap-4 mt-2">
