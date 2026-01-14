@@ -53,7 +53,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleAuthUser = async (supabaseUser: SupabaseUser) => {
+  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser) => {
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
@@ -75,7 +75,7 @@ const App: React.FC = () => {
       const bProf = barbers.find(b => b.userId === fullUser.id);
       setBarberProfile(bProf || null);
     }
-  };
+  }, [syncAllData]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -89,7 +89,7 @@ const App: React.FC = () => {
     initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         await handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -101,7 +101,7 @@ const App: React.FC = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [syncAllData]);
+  }, [handleAuthUser]);
 
   useEffect(() => {
     if (!user) return;

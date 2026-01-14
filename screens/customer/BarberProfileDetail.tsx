@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { db } from '../../store/mockDatabase';
-import { BarberProfile, Service, Booking, User, WorkingDay, BreakTime } from '../../types';
+import { Service, Booking, User } from '../../types';
 import { Button, Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Building2, UserCircle2, Scissors, Hourglass, Phone, Navigation } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, UserCircle2, Scissors, Hourglass, Phone, Navigation } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -24,12 +24,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
 
-  // If barber is not found, we shouldn't render or access properties
+  // Safety check for TypeScript and UX
   if (!barber) {
     return (
-      <div className="h-screen bg-black flex items-center justify-center p-10 text-center">
-        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px]">Barber not found</p>
-        <Button onClick={onBack} className="mt-4">Back</Button>
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10 text-center">
+        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Barber profile not found</p>
+        <Button onClick={onBack}>Back to Explore</Button>
       </div>
     );
   }
