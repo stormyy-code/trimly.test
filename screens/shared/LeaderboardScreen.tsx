@@ -3,20 +3,21 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { db } from '../../store/database';
 import { Card } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Trophy, Crown, Star, Loader2 } from 'lucide-react';
+import { Trophy, Crown, Star, Loader2, ChevronRight } from 'lucide-react';
 
 interface LeaderboardScreenProps {
   lang: Language;
+  onSelectBarber?: (id: string) => void;
 }
 
-const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang }) => {
+const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBarber }) => {
   const [loading, setLoading] = useState(true);
   const t = translations[lang];
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      await Promise.all([
+      await Promise.allSettled([
         db.getReviews(),
         db.getBookings(),
         db.getBarbers()
@@ -85,6 +86,7 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang }) => {
           return (
             <Card 
               key={barber.id} 
+              onClick={() => onSelectBarber?.(barber.id)}
               className={`p-6 flex items-center gap-6 transition-all relative overflow-hidden rounded-[2.5rem] border ${
                 isWinner ? 'border-[#D4AF37] bg-black shadow-[0_10px_40px_rgba(212,175,55,0.1)]' : 'border-white/5 bg-zinc-950/30'
               }`}
@@ -120,11 +122,12 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang }) => {
                   </div>
 
                   <div className="flex flex-col">
-                    <span className="text-white text-[10px] font-black leading-none">{barber.reviewCount}</span>
-                    <span className="text-zinc-600 text-[7px] font-black uppercase tracking-widest">Recenzija</span>
+                    <span className="text-white text-[10px] font-black leading-none">{barber.cutCount}</span>
+                    <span className="text-zinc-600 text-[7px] font-black uppercase tracking-widest">Šišanja</span>
                   </div>
                 </div>
               </div>
+              <ChevronRight size={20} className="text-zinc-800" />
             </Card>
           );
         })}

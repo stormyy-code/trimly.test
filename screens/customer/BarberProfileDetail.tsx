@@ -4,7 +4,7 @@ import { db } from '../../store/database';
 import { Service, Booking, User, WorkingDay } from '../../types';
 import { Button, Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, UserCircle2, Scissors, Hourglass, Phone, Navigation } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, UserCircle2, Scissors, Hourglass, Phone, Navigation, ExternalLink } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -46,7 +46,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
   const avgRating = reviews.length 
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) 
-    : "4.8";
+    : "0.0";
 
   const timeSlots = useMemo(() => {
     if (!selectedDate || !barber) return [];
@@ -103,7 +103,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   }, [selectedDate, barber, barberBookings]);
 
   const availableDates = useMemo(() => {
-    // Explicitly typed array to fix TS2345 'never[]' error
     const dates: DateOption[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date();
@@ -116,6 +115,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     }
     return dates;
   }, [lang]);
+
+  const handleOpenInMaps = () => {
+    const fullAddress = `${barber.address}, ${(barber as any).zipCode || ''} ${(barber as any).city || 'Zagreb'}`;
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
+    window.open(url, '_blank');
+  };
 
   const handleBook = async () => {
     if (!selectedService || !selectedDate || !selectedTime || !barber) return;
@@ -199,7 +204,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
              <section className="space-y-4">
                 <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><MapPin size={14} className="text-[#D4AF37]" /> LOKACIJA</div>
                 <Card className="p-6 bg-zinc-900/40 border-white/5">
-                  <p className="text-white font-black text-sm italic mb-4">{barber.address}</p>
+                  <p className="text-white font-black text-sm italic mb-4">
+                    {barber.address}, {(barber as any).zipCode || ''} {(barber as any).city || 'Zagreb'}
+                  </p>
+                  <Button onClick={handleOpenInMaps} variant="secondary" className="mb-4 h-14 text-[9px] flex items-center justify-center gap-2">
+                    <Navigation size={14} /> Otvori u Google Kartama
+                  </Button>
                   <div className="w-full h-48 bg-zinc-950 rounded-2xl overflow-hidden relative border border-white/5">
                     <img src="https://images.unsplash.com/photo-1549414574-8555e0546960?q=80&w=600" className="w-full h-full object-cover grayscale opacity-20" alt="Map" />
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -217,7 +227,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           <div className="space-y-4 animate-lux-fade">
             {services.map(s => (
               <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-6 flex gap-6 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl' : 'border-white/5'}`}>
-                <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0"><img src={s.imageUrl} className="w-full h-full object-cover grayscale brightness-90" alt={s.name} /></div>
+                <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+                  <img src={s.imageUrl} className="w-full h-full object-cover grayscale brightness-90" alt={s.name} />
+                </div>
                 <div className="flex-1">
                   <h4 className="font-black text-lg uppercase tracking-tighter text-white italic">{s.name}</h4>
                   <div className="flex items-center gap-4 mt-2">

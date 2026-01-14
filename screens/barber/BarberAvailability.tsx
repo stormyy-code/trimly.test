@@ -1,10 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../../store/database';
 import { BarberProfile, WorkingDay, BreakTime } from '../../types';
 import { translations, Language } from '../../translations';
 import { Card, Button, Badge } from '../../components/UI';
-import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2 } from 'lucide-react';
+import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2, AlertCircle } from 'lucide-react';
 import { BARBER_INVITE_CODE } from '../../constants';
 
 interface BarberAvailabilityProps {
@@ -12,24 +12,56 @@ interface BarberAvailabilityProps {
   lang: Language;
 }
 
+const getWeekNumber = (date: Date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
 const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang }) => {
   const t = translations[lang];
-  const barber = db.getBarbersSync().find(b => b.id === barberId);
+  const [barber, setBarber] = useState<BarberProfile | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isNewWeek, setIsNewWeek] = useState(false);
   
-  const [slotInterval, setSlotInterval] = useState<number>(barber?.slotInterval || 45);
-  const [workingHours, setWorkingHours] = useState<WorkingDay[]>(
-    barber?.workingHours || [
-      { day: 'Monday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
-      { day: 'Tuesday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
-      { day: 'Wednesday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
-      { day: 'Thursday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
-      { day: 'Friday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
-      { day: 'Saturday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
-      { day: 'Sunday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
-    ]
-  );
+  const [slotInterval, setSlotInterval] = useState<number>(45);
+  const [workingHours, setWorkingHours] = useState<WorkingDay[]>([
+    { day: 'Monday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
+    { day: 'Tuesday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
+    { day: 'Wednesday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
+    { day: 'Thursday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
+    { day: 'Friday', enabled: true, startTime: '09:00', endTime: '17:00', breaks: [] },
+    { day: 'Saturday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
+    { day: 'Sunday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
+  ]);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const barbers = await db.getBarbers();
+      const b = barbers.find(x => x.id === barberId);
+      if (b) {
+        setBarber(b);
+        setSlotInterval(b.slotInterval || 45);
+        
+        // Check week logic
+        const currentWeek = getWeekNumber(new Date());
+        const storedWeek = (b as any).lastUpdatedWeek || 0;
+        
+        if (storedWeek !== currentWeek) {
+          setIsNewWeek(true);
+        } else if (b.workingHours) {
+          setWorkingHours(b.workingHours);
+        }
+      }
+      setLoading(false);
+    };
+    load();
+  }, [barberId]);
 
   const toggleDay = (index: number) => {
     const next = [...workingHours];
@@ -70,9 +102,19 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
 
   const handleSave = async () => {
     if (!barber) return;
-    await db.saveBarbers({ ...barber, workingHours, slotInterval });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const currentWeek = getWeekNumber(new Date());
+    const success = await db.saveBarbers({ 
+      ...barber, 
+      workingHours, 
+      slotInterval,
+      lastUpdatedWeek: currentWeek 
+    } as any);
+    
+    if (success) {
+      setSaved(true);
+      setIsNewWeek(false);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
   return (
@@ -93,6 +135,15 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
           </div>
         </div>
       </div>
+
+      {isNewWeek && (
+        <div className="mx-1 p-6 bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-[2rem] flex items-center gap-4 animate-pulse">
+          <AlertCircle className="text-[#D4AF37] shrink-0" size={24} />
+          <p className="text-[10px] font-black text-white uppercase tracking-widest leading-relaxed">
+            Novi tjedan je počeo! Molimo potvrdite ili unesite novi raspored rada kako biste bili dostupni za klijente.
+          </p>
+        </div>
+      )}
 
       <section className="space-y-4 px-1">
         <label className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.3em] ml-4">{t.slotInterval}</label>
@@ -198,6 +249,7 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
       <div className="px-1 pt-6">
         <Button 
           onClick={handleSave} 
+          disabled={loading}
           className="w-full h-20 text-xs font-black uppercase tracking-widest shadow-2xl"
         >
           {saved ? <><CheckCircle2 size={18} className="mr-2" /> {t.done}</> : t.save}

@@ -23,7 +23,17 @@ export const db = {
 
   updateProfileDetails: async (userId: string, updates: { full_name?: string, avatar_url?: string }) => {
     const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
-    return !error;
+    if (!error) {
+      // Sync local cache
+      const users = db.getUsersSync();
+      const idx = users.findIndex(u => u.id === userId);
+      if (idx !== -1) {
+        users[idx] = { ...users[idx], ...updates } as any;
+        localStorage.setItem('trimly_users_cache', JSON.stringify(users));
+      }
+      return true;
+    }
+    return false;
   },
 
   updateProfileRole: async (userId: string, role: string) => {
@@ -32,7 +42,8 @@ export const db = {
       id: userId, 
       role: role.toLowerCase().trim(),
       email: authUser?.email || ''
-    });
+    }, { onConflict: 'id' });
+    
     if (!error) {
       const active = db.getActiveUser();
       if (active && active.id === userId) db.setActiveUser({ ...active, role: role as any });
@@ -79,10 +90,14 @@ export const db = {
 
   saveBarbers: async (barber: Partial<BarberProfile>) => {
     const payload = { ...barber };
-    if (!payload.id) delete payload.id;
+    // Remove complex nested objects if necessary or ensure they are JSONB compatible
     const { error } = await supabase.from('barbers').upsert(payload, { onConflict: 'userId' });
-    if (!error) await db.getBarbers(); 
-    return !error;
+    if (!error) {
+      await db.getBarbers(); 
+      return true;
+    }
+    console.error("Save Barber Error:", error);
+    return false;
   },
 
   approveBarber: async (barberId: string) => {
@@ -96,7 +111,12 @@ export const db = {
     let query = supabase.from('services').select('*');
     if (barberId) query = query.eq('barberId', barberId);
     const { data, error } = await query;
-    if (!error && data) localStorage.setItem('trimly_services_cache', JSON.stringify(data));
+    if (!error && data) {
+      // Logic for service sync: only cache current barber's services if filtered, or all
+      const cached = db.getServicesSync();
+      const others = cached.filter(s => barberId ? s.barberId !== barberId : false);
+      localStorage.setItem('trimly_services_cache', JSON.stringify([...others, ...data]));
+    }
     return (data as any) || db.getServicesSync();
   },
   

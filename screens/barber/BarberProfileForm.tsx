@@ -7,7 +7,7 @@ import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast } from '../../components/UI';
-import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle } from 'lucide-react';
+import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle, Navigation } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 
@@ -26,6 +26,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [fullName, setFullName] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [city, setCity] = useState('Zagreb');
   const [bio, setBio] = useState('');
   const [workMode, setWorkMode] = useState<WorkMode>('classic');
   const [pic, setPic] = useState('https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
@@ -47,13 +49,15 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const barbers = await db.getBarbers();
       const existing = barbers.find(b => b.userId === userId);
       if (existing) {
-        setFullName(existing.fullName);
-        setNeighborhood(existing.neighborhood);
-        setAddress(existing.address);
-        setBio(existing.bio);
-        setWorkMode(existing.workMode);
-        setPic(existing.profilePicture);
+        setFullName(existing.fullName || '');
+        setNeighborhood(existing.neighborhood || '');
+        setAddress(existing.address || '');
+        setBio(existing.bio || '');
+        setWorkMode(existing.workMode || 'classic');
+        setPic(existing.profilePicture || 'https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
         setGallery(existing.gallery || []);
+        if ((existing as any).zipCode) setZipCode((existing as any).zipCode);
+        if ((existing as any).city) setCity((existing as any).city);
       }
     };
     loadExisting();
@@ -102,7 +106,11 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     if (!file) return;
     setIsUploading(true);
     const url = await StorageService.uploadPhoto(file, 'profiles');
-    if (url) setPic(url);
+    if (url) {
+      setPic(url);
+    } else {
+      setToastMsg({ msg: 'Greška pri uploadu slike.', type: 'error' });
+    }
     setIsUploading(false);
   };
 
@@ -111,7 +119,11 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     if (!files || files.length === 0) return;
     setIsUploading(true);
     const url = await StorageService.uploadPhoto(files[0], 'gallery');
-    if (url) setGallery(prev => [...prev, url]);
+    if (url) {
+      setGallery(prev => [...prev, url]);
+    } else {
+      setToastMsg({ msg: 'Greška pri uploadu u galeriju.', type: 'error' });
+    }
     setIsUploading(false);
   };
 
@@ -120,21 +132,30 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     setIsLoading(true);
     const barbers = await db.getBarbers();
     const existing = barbers.find(b => b.userId === userId);
-    const profile: Partial<BarberProfile> = {
+    
+    const profile: any = {
       userId,
       fullName,
       profilePicture: pic,
       neighborhood,
       address,
+      zipCode,
+      city,
       bio,
       gallery,
       workMode,
       approved: existing ? existing.approved : false,
       createdAt: existing ? existing.createdAt : new Date().toISOString()
     };
+    
     const success = await db.saveBarbers(profile);
     setIsLoading(false);
-    if (success) onComplete();
+    if (success) {
+      setToastMsg({ msg: t.done, type: 'success' });
+      setTimeout(onComplete, 1000);
+    } else {
+      setToastMsg({ msg: 'Greška pri spremanju profila.', type: 'error' });
+    }
   };
 
   return (
@@ -170,7 +191,11 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       <div className="space-y-8 px-6">
         <Input label="Puno Ime" value={fullName} onChange={setFullName} placeholder="npr. Marko Markić" />
         <Input label="Kvart" value={neighborhood} onChange={setNeighborhood} placeholder="npr. Trešnjevka" />
-        <Input label="Adresa" value={address} onChange={setAddress} placeholder="npr. Ilica 10" />
+        <Input label="Ulica i kućni broj" value={address} onChange={setAddress} placeholder="npr. Ilica 10" />
+        <div className="grid grid-cols-2 gap-4">
+           <Input label="Poštanski broj" value={zipCode} onChange={setZipCode} placeholder="10000" />
+           <Input label="Grad" value={city} onChange={setCity} placeholder="Zagreb" />
+        </div>
         
         <div className="space-y-2">
           <label className="text-[9px] font-black text-zinc-600 ml-4 uppercase tracking-[0.2em]">O vama (Bio)</label>

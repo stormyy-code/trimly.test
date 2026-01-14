@@ -52,7 +52,9 @@ const App: React.FC = () => {
       }
       await Promise.allSettled(promises);
       window.dispatchEvent(new Event('app-sync-complete'));
-    } catch (e) {}
+    } catch (e) {
+      console.error("Sync error:", e);
+    }
   }, []);
 
   const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser) => {
@@ -105,25 +107,27 @@ const App: React.FC = () => {
   }, [syncAllData]);
 
   useEffect(() => {
+    let mounted = true;
+
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
+        if (session?.user && mounted) {
           await handleAuthUser(session.user);
-        } else {
+        } else if (mounted) {
           setIsInitializing(false);
         }
       } catch (e) {
-        setIsInitializing(false);
+        if (mounted) setIsInitializing(false);
       }
     };
 
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user && mounted) {
         await handleAuthUser(session.user);
-      } else if (event === 'SIGNED_OUT') {
+      } else if (event === 'SIGNED_OUT' && mounted) {
         setUser(null);
         setBarberProfile(null);
         setIsInitializing(false);
@@ -131,7 +135,10 @@ const App: React.FC = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [handleAuthUser]);
 
   const handleLogout = async () => {
@@ -170,7 +177,7 @@ const App: React.FC = () => {
       if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
       switch (activeTab) {
         case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} />;
+        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'bookings': return <CustomerBookings lang={lang} customerId={user.id} />;
         case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} onRoleUpdate={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
         default: return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
@@ -181,7 +188,7 @@ const App: React.FC = () => {
       if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} />;
+        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'schedule': return <BarberAvailability lang={lang} barberId={barberProfile.id} />;
         case 'services': return <BarberServices lang={lang} barberId={barberProfile.id} />;
         case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
@@ -192,7 +199,7 @@ const App: React.FC = () => {
     if (user.role === 'admin') {
       switch (activeTab) {
         case 'home': return <AdminDashboard lang={lang} onLogout={handleLogout} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} />;
+        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'barbers': return <AdminBarbers lang={lang} />;
         case 'approvals': return <AdminApprovals lang={lang} />;
         case 'settings': return (

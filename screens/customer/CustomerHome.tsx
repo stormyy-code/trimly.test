@@ -5,7 +5,6 @@ import { BarberProfile } from '../../types';
 import { Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
 import { MapPin, Search, Map as MapIcon, List, Trophy, Sparkles, Loader2, Crown, Star, ArrowDownNarrowWide, SlidersHorizontal } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 
 interface CustomerHomeProps {
   onSelectBarber: (id: string) => void;
@@ -19,14 +18,13 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'list' | 'map'>('list');
   const [sortType, setSortType] = useState<SortType>('recommended');
-  const [isSearchingMaps, setIsSearchingMaps] = useState(false);
   const [refresh, setRefresh] = useState(0);
 
   const t = translations[lang];
   
   useEffect(() => {
     const sync = async () => {
-      await Promise.all([db.getBarbers(), db.getReviews(), db.getServices()]);
+      await Promise.allSettled([db.getBarbers(), db.getReviews(), db.getServices()]);
       setRefresh(prev => prev + 1);
     };
     sync();
@@ -85,20 +83,6 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
 
     return result;
   }, [barbers, allReviews, allServices, selectedQuarter, searchQuery, sortType]);
-
-  const handleExploreOnMaps = async () => {
-    setIsSearchingMaps(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: "Find high quality barbershops in Zagreb city center and list them as links.",
-        config: { tools: [{ googleMaps: {} }] },
-      });
-    } catch (e) {
-      console.error(e);
-    } finally { setIsSearchingMaps(false); }
-  };
 
   const SafeImage = ({ src, className }: { src: string, className: string }) => {
     const [error, setError] = useState(false);
@@ -188,12 +172,6 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
               </button>
             </div>
           ))}
-          <div className="absolute bottom-8 left-8 right-8 space-y-3">
-             <button onClick={handleExploreOnMaps} className="w-full h-16 bg-black/80 backdrop-blur border border-white/10 rounded-2xl flex items-center justify-center gap-4 text-white font-black text-[10px] uppercase tracking-widest shadow-2xl active:scale-95 transition-all">
-                {isSearchingMaps ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} className="text-[#D4AF37]" />}
-                Explore Cloud Network
-             </button>
-          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 px-1">

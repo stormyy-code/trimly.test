@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../store/database';
 import { StorageService } from '../../services/StorageService';
@@ -41,7 +42,11 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
     if (!file) return;
     setIsUploading(true);
     const url = await StorageService.uploadPhoto(file, 'services');
-    if (url) setImageUrl(url);
+    if (url) {
+      setImageUrl(url);
+    } else {
+      setToast({ msg: 'Greška pri uploadu slike.', type: 'error' });
+    }
     setIsUploading(false);
   };
 
@@ -99,7 +104,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
               className="w-full aspect-video bg-zinc-900 rounded-3xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden relative"
             >
               {imageUrl ? (
-                <img src={imageUrl} className="w-full h-full object-cover" />
+                <img src={imageUrl} className="w-full h-full object-cover" alt="" />
               ) : isUploading ? (
                 <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
               ) : (
@@ -139,5 +144,4 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
   );
 }
 
-// Fixed: Added missing default export
 export default BarberServices;
