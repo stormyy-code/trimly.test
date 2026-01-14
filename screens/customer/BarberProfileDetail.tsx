@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { db } from '../../store/database';
-import { Service, Booking, User } from '../../types';
+import { Service, Booking, User, WorkingDay } from '../../types';
 import { Button, Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
 import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, UserCircle2, Scissors, Hourglass, Phone, Navigation } from 'lucide-react';
@@ -27,26 +27,27 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   if (!barber) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10 text-center">
-        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Barber profil nije pronađen</p>
-        <Button onClick={onBack}>Povratak na istraživanje</Button>
+        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Profil nije pronađen</p>
+        <Button onClick={onBack}>Povratak</Button>
       </div>
     );
   }
 
   const services = db.getServicesSync().filter(s => s.barberId === barberId);
   const reviews = db.getReviewsSync().filter(r => r.barberId === barberId);
-  const allBookings = db.getBookingsSync();
-  const barberBookings = allBookings.filter(b => b.barberId === barberId);
+  const barberBookings = db.getBookingsSync().filter(b => b.barberId === barberId);
   
   const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
-  const avgRating = reviews.length ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : "4.8";
+  const avgRating = reviews.length 
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) 
+    : "4.8";
 
   const timeSlots = useMemo(() => {
     if (!selectedDate || !barber) return [];
 
     const dateObj = new Date(selectedDate);
     const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-    const dayConfig = barber.workingHours?.find(wh => wh.day === dayOfWeek);
+    const dayConfig = (barber.workingHours || []).find((wh: WorkingDay) => wh.day === dayOfWeek);
 
     if (!dayConfig || !dayConfig.enabled) return [];
 
@@ -54,8 +55,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     const interval = barber.slotInterval || 45;
     
     const timeToMinutes = (tStr: string) => {
-      const [h, m] = tStr.split(':').map(Number);
-      return h * 60 + m;
+      const parts = tStr.split(':');
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
     };
 
     const minutesToTime = (m: number) => {
@@ -70,19 +71,21 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
       .filter(b => b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending'))
       .map(b => b.time);
 
+    const breaks = dayConfig.breaks || [];
+
     while (current + interval <= end) {
       const timeStr = minutesToTime(current);
       
-      const isBreak = dayConfig.breaks?.some(brk => {
+      const isDuringBreak = breaks.some(brk => {
         const bStart = timeToMinutes(brk.startTime);
         const bEnd = timeToMinutes(brk.endTime);
         return (current >= bStart && current < bEnd);
       });
 
-      if (!isBreak) {
+      if (!isDuringBreak) {
         slots.push({
           time: timeStr,
-          isTaken: takenTimes.includes(timeStr)
+          isTaken: takenTimes.indexOf(timeStr) !== -1
         });
       }
       current += interval;
@@ -134,17 +137,15 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black p-10 text-center animate-lux-fade">
       <div className="relative mb-8">
         <div className="absolute inset-0 bg-[#D4AF37]/20 blur-3xl rounded-full"></div>
-        <div className="w-24 h-24 bg-zinc-900 rounded-[2.5rem] border border-[#D4AF37]/30 flex items-center justify-center relative z-10 shadow-[0_20px_50px_rgba(212,175,55,0.2)]">
+        <div className="w-24 h-24 bg-zinc-900 rounded-[2.5rem] border border-[#D4AF37]/30 flex items-center justify-center relative z-10 shadow-2xl">
           <Hourglass className="text-[#D4AF37] animate-pulse" size={40} />
         </div>
       </div>
-      <h2 className="text-white font-black text-2xl italic uppercase tracking-tighter leading-tight">
-        {lang === 'hr' ? 'Zahtjev poslan!' : 'Request Sent!'}
-      </h2>
+      <h2 className="text-white font-black text-2xl italic uppercase tracking-tighter">Zahtjev poslan!</h2>
       <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mt-6 max-w-[240px] leading-relaxed">
-        {lang === 'hr' ? 'Barber će primiti obavijest i potvrditi vaš termin u najkraćem roku.' : 'The barber will receive a notification and confirm your slot shortly.'}
+        Barber će primiti obavijest i potvrditi vaš termin u najkraćem roku.
       </p>
-      <Button onClick={onBack} className="mt-12 w-full h-18 text-[11px] font-black tracking-widest uppercase shadow-2xl">Završi</Button>
+      <Button onClick={onBack} className="mt-12 w-full h-18 text-[11px] font-black tracking-widest uppercase">Završi</Button>
     </div>
   );
 
@@ -157,7 +158,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
             <ArrowLeft size={22} className="text-white" />
           </button>
           <div className="flex gap-2">
-             <a href={`tel:+385912345678`} className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><Phone size={20} className="text-black" /></a>
+             <a href={`tel:+385910000000`} className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><Phone size={20} className="text-black" /></a>
              <button className="w-12 h-12 bg-black/80 premium-blur border border-white/10 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><Heart size={22} className="text-zinc-500" /></button>
           </div>
         </div>
@@ -223,7 +224,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
       </div>
 
       {selectedService && (
-        <div className="fixed bottom-0 left-0 right-0 bg-[#0A0A0A] border-t border-white/10 p-8 z-[110] rounded-t-[4rem] shadow-[0_-30px_70px_rgba(0,0,0,0.9)] animate-slide-up space-y-8 premium-blur">
+        <div className="fixed bottom-0 left-0 right-0 bg-[#0A0A0A] border-t border-white/10 p-8 z-[110] rounded-t-[4rem] shadow-2xl animate-slide-up space-y-8 premium-blur">
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
             {availableDates.map(d => (
               <button key={d.full} onClick={() => setSelectedDate(d.full)} className={`shrink-0 w-20 h-24 rounded-3xl flex flex-col items-center justify-center gap-2 transition-all border ${selectedDate === d.full ? 'bg-[#D4AF37] text-black border-[#D4AF37] shadow-xl scale-105' : 'bg-zinc-900 border-white/5 text-zinc-600'}`}>
@@ -241,7 +242,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
               ))}
             </div>
           )}
-          <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-20 text-xs font-black uppercase tracking-[0.3em] shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
+          <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-20 text-xs font-black uppercase tracking-widest">
             Potvrdi Rezervaciju
           </Button>
         </div>
