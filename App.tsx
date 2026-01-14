@@ -21,10 +21,9 @@ import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { 
-  Lock,
   Loader2,
-  LogOut,
-  ShieldCheck
+  ShieldCheck,
+  LogOut
 } from 'lucide-react';
 import { Toast, Button } from './components/UI';
 
@@ -120,7 +119,7 @@ const App: React.FC = () => {
     const fullUser = { 
       id: supabaseUser.id,
       email: supabaseUser.email || '',
-      role: profile?.role || 'customer' 
+      role: (profile?.role as any) || 'customer' 
     } as User;
     
     setUser(fullUser);
@@ -239,6 +238,8 @@ const App: React.FC = () => {
     return null;
   };
 
+  const isBarberPending = user?.role === 'barber' && barberProfile && !barberProfile.approved;
+
   return (
     <div className="h-screen bg-black antialiased overflow-hidden">
       {!user ? (
@@ -252,7 +253,7 @@ const App: React.FC = () => {
           onTabChange={setActiveTab} 
           onLogout={handleLogout}
           lang={lang}
-          hideShell={!!selectedBarberId || !!(user.role === 'barber' && barberProfile && !barberProfile.approved)} 
+          hideShell={!!selectedBarberId || !!isBarberPending} 
           title={user.role === 'admin' ? 'Network Admin' : user.role === 'barber' ? 'Barber Dashboard' : 'Trimly Network'}
         >
           {renderView()}
