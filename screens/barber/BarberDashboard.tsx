@@ -37,7 +37,6 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   useEffect(() => {
     const handleSync = () => setRefreshTrigger(prev => prev + 1);
     window.addEventListener('app-sync-complete', handleSync);
-    // Real-time listener for barber's bookings
     const channel = supabase
       .channel('barber-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barberId=eq.${barberId}` }, () => {
@@ -109,11 +108,11 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
       
       <div className="grid grid-cols-2 gap-4 p-5 bg-black/40 rounded-3xl border border-white/[0.03]">
         <div className="text-center space-y-1">
-          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Date</p>
+          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Datum</p>
           <span className="text-[10px] font-black text-zinc-400">{booking.date}</span>
         </div>
         <div className="text-center border-l border-white/5 space-y-1">
-          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Time</p>
+          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Vrijeme</p>
           <span className="text-[10px] font-black text-zinc-400">{booking.time}h</span>
         </div>
       </div>
@@ -155,16 +154,16 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
             <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em] text-center">{t.efficiencyStats}</span>
           </div>
           <div className="flex gap-8 w-full justify-center items-center">
-            <VelocityScale label="Day" value={stats.daily} max={10} />
-            <VelocityScale label="Month" value={stats.monthly} max={100} />
-            <VelocityScale label="Year" value={stats.yearly} max={1000} />
+            <VelocityScale label="Dan" value={stats.daily} max={10} />
+            <VelocityScale label="Mjesec" value={stats.monthly} max={100} />
+            <VelocityScale label="Godina" value={stats.yearly} max={1000} />
           </div>
         </div>
       </section>
 
       <div className="flex bg-zinc-950 p-2 rounded-[2rem] border border-white/5 mx-1">
         {(['pending', 'active', 'history'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[8px] font-black uppercase tracking widest rounded-2xl transition-all relative ${activeTab === tab ? 'bg-white text-black shadow-2xl scale-100' : 'text-zinc-600 scale-95 opacity-60'}`}>
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all relative ${activeTab === tab ? 'bg-white text-black shadow-2xl scale-100' : 'text-zinc-600 scale-95 opacity-60'}`}>
             {tab === 'pending' ? 'Zahtjevi' : tab === 'active' ? 'Aktivno' : 'Povijest'} 
             {tab === 'pending' && pendingBookings.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shadow-xl border-2 border-black animate-bounce">{pendingBookings.length}</span>

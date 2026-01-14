@@ -1,10 +1,11 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { db } from '../../store/database';
 import { StorageService } from '../../services/StorageService';
 import { User } from '../../types';
 import { Card, Button, Toast, Input } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, CheckCircle, FileText, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
+import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, Trash2, AlertTriangle, Scissors } from 'lucide-react';
 import { supabase } from '../../store/supabase';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
@@ -55,7 +56,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setFullName(tempName);
       setToastMsg({ msg: t.done, type: 'success' });
       setIsEditingName(false);
-      // Fixed: Notify parent about the change if needed
       onRoleUpdate?.();
     } else {
       setToastMsg({ msg: 'Greška pri spremanju.', type: 'error' });
@@ -88,7 +88,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       await supabase.auth.signOut();
       onLogout();
     } catch (e) {
-      setToastMsg({ msg: 'Error deleting account.', type: 'error' });
+      setToastMsg({ msg: 'Greška pri brisanju.', type: 'error' });
     } finally {
       setPassLoading(false);
     }
@@ -162,14 +162,13 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 px-1">
-        <Card className="p-8 bg-zinc-950 border-white/5 flex flex-col items-center text-center gap-3">
-          <p className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Moja Šišanja</p>
-          <p className="text-4xl font-black text-white italic tracking-tighter leading-none">{completedCuts}</p>
-        </Card>
-        <Card className="p-8 bg-emerald-500/5 border-emerald-500/10 flex flex-col items-center text-center gap-3">
-          <p className="text-[7px] font-black text-emerald-500 uppercase tracking-widest">Loyalty Status</p>
-          <p className="text-4xl font-black text-emerald-400 italic tracking-tighter leading-none">{completedCuts * 10}</p>
+      <div className="px-1">
+        <Card className="p-8 bg-zinc-950 border-white/5 flex flex-col items-center text-center gap-4 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5">
+             <Scissors size={48} className="text-white" />
+          </div>
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">Ukupno šišanja u mreži</p>
+          <p className="text-5xl font-black text-white italic tracking-tighter leading-none">{completedCuts}</p>
         </Card>
       </div>
 
@@ -220,7 +219,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
 
       <section className="space-y-4 px-1 pt-4">
         <div className="flex items-center gap-3 ml-4">
-           <AlertTriangle size={12} classNametext-red-500" />
+           <AlertTriangle size={12} className="text-red-500" />
            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t.dangerZone}</p>
         </div>
         <Card className="p-6 bg-red-500/5 border-red-500/10 space-y-4">
@@ -255,5 +254,4 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   );
 }
 
-// Fixed: Added missing default export
 export default CustomerProfile;

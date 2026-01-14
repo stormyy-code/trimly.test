@@ -3,7 +3,7 @@
  * EmailService.ts
  * Upravlja slanjem obavijesti. 
  * Budući da klijent nema domenu, primarni sustav za Auth je Supabase SMTP (Gmail).
- * Ovaj servis služi za dodatne obavijesti brijačima.
+ * Ovaj servis služi za dodatne obavijesti barberima.
  */
 
 export const EmailService = {
@@ -47,7 +47,7 @@ export const EmailService = {
   },
 
   /**
-   * Obavijest brijaču o novom zahtjevu.
+   * Obavijest barberu o novom zahtjevu.
    */
   notifyBarberNewBooking: async (barberEmail: string, clientName: string, time: string, date: string) => {
     const html = `

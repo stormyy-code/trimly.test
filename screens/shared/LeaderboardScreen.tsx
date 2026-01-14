@@ -76,7 +76,9 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang }) => {
       </div>
 
       <section className="space-y-4 px-2">
-        {data.map((barber, index) => {
+        {data.length === 0 ? (
+          <div className="py-20 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">Trenutno nema rangiranih barbera</div>
+        ) : data.map((barber, index) => {
           const isWinner = index === 0;
           const hasReviews = barber.reviewCount > 0;
 
