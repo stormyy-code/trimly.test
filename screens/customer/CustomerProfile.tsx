@@ -40,8 +40,8 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   useEffect(() => {
     const fetchProfile = async () => {
       const { data } = await supabase.from('profiles').select('avatar_url, full_name').eq('id', user.id).maybeSingle();
-      if (data?.avatar_url) setProfilePic(data.avatar_url);
-      if (data?.full_name) {
+      if (data && data.avatar_url) setProfilePic(data.avatar_url);
+      if (data && data.full_name) {
         setFullName(data.full_name);
         setTempName(data.full_name);
       }
@@ -56,7 +56,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setFullName(tempName);
       setToastMsg({ msg: t.done, type: 'success' });
       setIsEditingName(false);
-      onRoleUpdate?.();
+      if (onRoleUpdate) onRoleUpdate();
     } else {
       setToastMsg({ msg: 'Greška pri spremanju.', type: 'error' });
     }
@@ -75,7 +75,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setNewPass('');
       setIsChangingPass(false);
     } catch (err: any) {
-      setToastMsg({ msg: err.message, type: 'error' });
+      setToastMsg({ msg: err.message || 'Greška', type: 'error' });
     } finally {
       setPassLoading(false);
     }
@@ -95,7 +95,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
     setIsUploading(true);
     try {
@@ -121,7 +121,11 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
              ) : (
                <UserIcon size={48} className="text-zinc-800" />
              )}
-             {isUploading && <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-30"><Loader2 className="animate-spin text-[#D4AF37]" /></div>}
+             {isUploading && (
+               <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-30">
+                 <Loader2 className="animate-spin text-[#D4AF37]" />
+               </div>
+             )}
           </div>
           <button 
             disabled={isUploading}

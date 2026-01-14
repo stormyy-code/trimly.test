@@ -13,6 +13,12 @@ interface BarberProfileDetailProps {
   lang: Language;
 }
 
+interface DateOption {
+  full: string;
+  dayName: string;
+  dayNum: number;
+}
+
 const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onBack, user, lang }) => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -54,9 +60,16 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     const slots: { time: string; isTaken: boolean }[] = [];
     const interval = barber.slotInterval || 45;
     
+    const activeOnDate = barberBookings.filter(b => 
+      b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending')
+    );
+    const takenTimes = activeOnDate.map(b => b.time);
+
+    const breaks = dayConfig.breaks || [];
+
     const timeToMinutes = (tStr: string) => {
-      const parts = tStr.split(':');
-      return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
+      const p = tStr.split(':');
+      return (parseInt(p[0]) * 60) + parseInt(p[1]);
     };
 
     const minutesToTime = (m: number) => {
@@ -66,17 +79,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     };
 
     let current = timeToMinutes(dayConfig.startTime);
-    const end = timeToMinutes(dayConfig.endTime);
-    
-    // Eksplicitno filtriranje zauzetih termina
-    const activeBookingsOnDate = barberBookings.filter(b => 
-      b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending')
-    );
-    const takenTimes = activeBookingsOnDate.map(b => b.time);
+    const endTimeInMinutes = timeToMinutes(dayConfig.endTime);
 
-    const breaks = dayConfig.breaks || [];
-
-    while (current + interval <= end) {
+    while (current + interval <= endTimeInMinutes) {
       const timeStr = minutesToTime(current);
       
       const isDuringBreak = breaks.some(brk => {
@@ -98,7 +103,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   }, [selectedDate, barber, barberBookings]);
 
   const availableDates = useMemo(() => {
-    const dates = [];
+    // Explicitly typed array to fix TS2345 'never[]' error
+    const dates: DateOption[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
