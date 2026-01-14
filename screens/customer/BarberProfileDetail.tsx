@@ -51,12 +51,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
     if (!dayConfig || !dayConfig.enabled) return [];
 
-    const slots: { time: string, isTaken: boolean }[] = [];
+    const slots: { time: string; isTaken: boolean }[] = [];
     const interval = barber.slotInterval || 45;
     
     const timeToMinutes = (tStr: string) => {
       const parts = tStr.split(':');
-      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
     };
 
     const minutesToTime = (m: number) => {
@@ -67,9 +67,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
     let current = timeToMinutes(dayConfig.startTime);
     const end = timeToMinutes(dayConfig.endTime);
-    const takenTimes = barberBookings
-      .filter(b => b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending'))
-      .map(b => b.time);
+    
+    // Eksplicitno filtriranje zauzetih termina
+    const activeBookingsOnDate = barberBookings.filter(b => 
+      b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending')
+    );
+    const takenTimes = activeBookingsOnDate.map(b => b.time);
 
     const breaks = dayConfig.breaks || [];
 
@@ -79,7 +82,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
       const isDuringBreak = breaks.some(brk => {
         const bStart = timeToMinutes(brk.startTime);
         const bEnd = timeToMinutes(brk.endTime);
-        return (current >= bStart && current < bEnd);
+        return current >= bStart && current < bEnd;
       });
 
       if (!isDuringBreak) {

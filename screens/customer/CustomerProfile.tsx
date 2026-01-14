@@ -163,7 +163,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       </div>
 
       <div className="px-1">
-        <Card className="p-8 bg-zinc-950 border-white/5 flex flex-col items-center text-center gap-4 relative overflow-hidden">
+        <Card className="p-8 bg-zinc-950 border-white/5 flex flex-col items-center text-center gap-4 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 right-0 p-4 opacity-5">
              <Scissors size={48} className="text-white" />
           </div>
