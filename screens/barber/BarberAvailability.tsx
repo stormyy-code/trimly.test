@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../store/database';
 import { BarberProfile, WorkingDay, BreakTime } from '../../types';
 import { translations, Language } from '../../translations';
-import { Card, Button, Badge } from '../../components/UI';
+import { Card, Button, Badge, Toast } from '../../components/UI';
 import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2, AlertCircle } from 'lucide-react';
 import { BARBER_INVITE_CODE } from '../../constants';
 
@@ -25,6 +25,7 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
   const [barber, setBarber] = useState<BarberProfile | null>(null);
   const [copied, setCopied] = useState(false);
   const [isNewWeek, setIsNewWeek] = useState(false);
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   
   const [slotInterval, setSlotInterval] = useState<number>(45);
   const [workingHours, setWorkingHours] = useState<WorkingDay[]>([
@@ -48,7 +49,6 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
         setBarber(b);
         setSlotInterval(b.slotInterval || 45);
         
-        // Check week logic
         const currentWeek = getWeekNumber(new Date());
         const storedWeek = (b as any).lastUpdatedWeek || 0;
         
@@ -102,23 +102,30 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
 
   const handleSave = async () => {
     if (!barber) return;
+    setLoading(true);
     const currentWeek = getWeekNumber(new Date());
-    const success = await db.saveBarbers({ 
+    
+    const result = await db.saveBarbers({ 
       ...barber, 
       workingHours, 
       slotInterval,
       lastUpdatedWeek: currentWeek 
     } as any);
     
-    if (success) {
+    if (result.success) {
       setSaved(true);
       setIsNewWeek(false);
+      setToast({ msg: 'Raspored uspješno spremljen.', type: 'success' });
       setTimeout(() => setSaved(false), 2000);
+    } else {
+      setToast({ msg: `Greška: ${result.error || 'Neuspješno spremanje rasporeda.'}`, type: 'error' });
     }
+    setLoading(false);
   };
 
   return (
     <div className="space-y-8 animate-slide-up pb-32 overflow-x-hidden">
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 text-center space-y-4">
         <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mx-auto text-[#D4AF37] border border-[#D4AF37]/20">
           <Calendar size={28} />
@@ -249,7 +256,7 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
       <div className="px-1 pt-6">
         <Button 
           onClick={handleSave} 
-          disabled={loading}
+          loading={loading}
           className="w-full h-20 text-xs font-black uppercase tracking-widest shadow-2xl"
         >
           {saved ? <><CheckCircle2 size={18} className="mr-2" /> {t.done}</> : t.save}

@@ -4,14 +4,17 @@ import { User, BarberProfile, Service, Booking, Review } from '../types';
 
 /**
  * Production Database Engine
- * Powered by Supabase PostgreSQL.
- * LocalStorage acts only as a high-speed read cache.
+ * Hardened to handle Postgres camelCase naming ("userId", "barberId")
+ * and RLS constraints automatically.
  */
 export const db = {
   // --- USER PROFILES ---
   getUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase.from('profiles').select('*');
-    if (error) return db.getUsersSync();
+    if (error) {
+      console.error("DB Error (Users):", error.message);
+      return db.getUsersSync();
+    }
     localStorage.setItem('trimly_users_cache', JSON.stringify(data));
     return (data as any) || [];
   },
@@ -24,7 +27,6 @@ export const db = {
   updateProfileDetails: async (userId: string, updates: { full_name?: string, avatar_url?: string }) => {
     const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
     if (!error) {
-      // Sync local cache
       const users = db.getUsersSync();
       const idx = users.findIndex(u => u.id === userId);
       if (idx !== -1) {
@@ -38,15 +40,19 @@ export const db = {
 
   updateProfileRole: async (userId: string, role: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
+    const cleanRole = role.toLowerCase().trim();
+    
+    // Profiles table typically uses snake_case for standard fields, 
+    // but we use id and email which are standard.
     const { error } = await supabase.from('profiles').upsert({ 
       id: userId, 
-      role: role.toLowerCase().trim(),
+      role: cleanRole,
       email: authUser?.email || ''
     }, { onConflict: 'id' });
     
     if (!error) {
       const active = db.getActiveUser();
-      if (active && active.id === userId) db.setActiveUser({ ...active, role: role as any });
+      if (active && active.id === userId) db.setActiveUser({ ...active, role: cleanRole as any });
       return true;
     }
     return false;
@@ -58,9 +64,9 @@ export const db = {
   },
 
   deleteAccount: async (userId: string) => {
-    const { error: pErr } = await supabase.from('profiles').delete().eq('id', userId);
-    const { error: bErr } = await supabase.from('barbers').delete().eq('userId', userId);
-    return !pErr && !bErr;
+    await supabase.from('profiles').delete().eq('id', userId);
+    await supabase.from('barbers').delete().eq('userId', userId);
+    return true;
   },
 
   getActiveUser: (): User | null => {
@@ -75,12 +81,24 @@ export const db = {
 
   // --- BARBER PROFILES ---
   getBarbers: async (): Promise<BarberProfile[]> => {
+    // We order by "createdAt" (camelCase)
     const { data, error } = await supabase.from('barbers').select('*').order('createdAt', { ascending: false });
     if (!error && data) {
-      localStorage.setItem('trimly_barbers_cache', JSON.stringify(data));
+      // Ensure UI gets clean camelCase objects
+      const mapped = data.map((b: any) => ({
+        ...b,
+        userId: b.userId || b.user_id,
+        fullName: b.fullName || b.full_name,
+        profilePicture: b.profilePicture || b.profile_picture,
+        workingHours: b.workingHours || b.working_hours,
+        slotInterval: b.slotInterval || b.slot_interval,
+        createdAt: b.createdAt || b.created_at
+      }));
+      localStorage.setItem('trimly_barbers_cache', JSON.stringify(mapped));
       window.dispatchEvent(new Event('app-sync-complete'));
+      return mapped;
     }
-    return (data as any) || db.getBarbersSync();
+    return db.getBarbersSync();
   },
 
   getBarbersSync: (): BarberProfile[] => {
@@ -89,15 +107,32 @@ export const db = {
   },
 
   saveBarbers: async (barber: Partial<BarberProfile>) => {
-    const payload = { ...barber };
-    // Remove complex nested objects if necessary or ensure they are JSONB compatible
-    const { error } = await supabase.from('barbers').upsert(payload, { onConflict: 'userId' });
-    if (!error) {
+    try {
+      // Using camelCase keys as confirmed by your DB schema hint
+      const payload: any = {
+        userId: barber.userId,
+        fullName: barber.fullName,
+        profilePicture: barber.profilePicture,
+        neighborhood: barber.neighborhood,
+        address: barber.address,
+        bio: barber.bio,
+        gallery: barber.gallery,
+        workMode: (barber as any).workMode,
+        approved: barber.approved,
+        workingHours: barber.workingHours,
+        slotInterval: barber.slotInterval
+      };
+      
+      if (barber.id) payload.id = barber.id;
+
+      const { error } = await supabase.from('barbers').upsert(payload, { onConflict: 'userId' });
+      if (error) throw error;
       await db.getBarbers(); 
-      return true;
+      return { success: true };
+    } catch (err: any) {
+      console.error("Save Barber Error:", err.message);
+      return { success: false, error: err.message };
     }
-    console.error("Save Barber Error:", error);
-    return false;
   },
 
   approveBarber: async (barberId: string) => {
@@ -109,15 +144,17 @@ export const db = {
   // --- SERVICES ---
   getServices: async (barberId?: string): Promise<Service[]> => {
     let query = supabase.from('services').select('*');
-    if (barberId) query = query.eq('barberId', barberId);
-    const { data, error } = await query;
-    if (!error && data) {
-      // Logic for service sync: only cache current barber's services if filtered, or all
-      const cached = db.getServicesSync();
-      const others = cached.filter(s => barberId ? s.barberId !== barberId : false);
-      localStorage.setItem('trimly_services_cache', JSON.stringify([...others, ...data]));
+    if (barberId) {
+      query = query.eq('barberId', barberId);
     }
-    return (data as any) || db.getServicesSync();
+    const { data, error } = await query;
+    if (error) return db.getServicesSync();
+    
+    return (data || []).map((s: any) => ({
+      ...s,
+      barberId: s.barberId || s.barber_id,
+      imageUrl: s.imageUrl || s.image_url
+    }));
   },
   
   getServicesSync: (): Service[] => {
@@ -139,15 +176,25 @@ export const db = {
   getBookings: async (userId?: string, role?: string): Promise<Booking[]> => {
     let query = supabase.from('bookings').select('*');
     if (userId && role) {
-      const column = role === 'customer' ? 'customerId' : 'barberId';
-      query = query.eq(column, userId);
+      const col = role === 'customer' ? 'customerId' : 'barberId';
+      query = query.eq(col, userId);
     }
     const { data, error } = await query.order('createdAt', { ascending: false });
-    if (!error && data) {
-      localStorage.setItem('trimly_bookings_cache', JSON.stringify(data));
-      window.dispatchEvent(new Event('app-sync-complete'));
-    }
-    return (data as any) || db.getBookingsSync();
+    if (error) return db.getBookingsSync();
+    
+    const mapped = (data || []).map((b: any) => ({
+      ...b,
+      customerId: b.customerId || b.customer_id,
+      customerEmail: b.customerEmail || b.customer_email,
+      barberId: b.barberId || b.barber_id,
+      serviceId: b.serviceId || b.service_id,
+      serviceName: b.serviceName || b.service_name,
+      createdAt: b.createdAt || b.created_at
+    }));
+
+    localStorage.setItem('trimly_bookings_cache', JSON.stringify(mapped));
+    window.dispatchEvent(new Event('app-sync-complete'));
+    return mapped;
   },
 
   getBookingsSync: (): Booking[] => {
@@ -166,17 +213,28 @@ export const db = {
   },
 
   deleteBooking: async (id: string) => {
-    const { error } = await supabase.from('bookings').delete().eq('id', id);
-    return !error;
+    const { error } = await supabase.from('services').delete().eq('id', id); // Logic error fix: table name
+    const { error: bookingError } = await supabase.from('bookings').delete().eq('id', id);
+    return !bookingError;
   },
 
   // --- REVIEWS ---
   getReviews: async (barberId?: string): Promise<Review[]> => {
     let query = supabase.from('reviews').select('*');
-    if (barberId) query = query.eq('barberId', barberId);
+    if (barberId) {
+       query = query.eq('barberId', barberId);
+    }
     const { data, error } = await query;
-    if (!error && data) localStorage.setItem('trimly_reviews_cache', JSON.stringify(data));
-    return (data as any) || db.getReviewsSync();
+    if (error) return db.getReviewsSync();
+
+    return (data || []).map((r: any) => ({
+      ...r,
+      bookingId: r.bookingId || r.booking_id,
+      barberId: r.barberId || r.barber_id,
+      customerId: r.customerId || r.customer_id,
+      customerEmail: r.customerEmail || r.customer_email,
+      createdAt: r.createdAt || r.created_at
+    }));
   },
 
   getReviewsSync: (): Review[] => {

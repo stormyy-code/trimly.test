@@ -7,7 +7,7 @@ import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast } from '../../components/UI';
-import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle, Navigation } from 'lucide-react';
+import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle, Navigation, X, ShieldCheck } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 
@@ -69,38 +69,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleChangePassword = async () => {
-    if (newPass.length < 6) {
-      setToastMsg({ msg: 'Lozinka mora imati barem 6 znakova.', type: 'error' });
-      return;
-    }
-    setPassLoading(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPass });
-      if (error) throw error;
-      setToastMsg({ msg: t.passwordUpdated, type: 'success' });
-      setNewPass('');
-      setIsChangingPass(false);
-    } catch (err: any) {
-      setToastMsg({ msg: err.message, type: 'error' });
-    } finally {
-      setPassLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    setPassLoading(true);
-    try {
-      await db.deleteAccount(userId);
-      await supabase.auth.signOut();
-      window.location.reload();
-    } catch (e) {
-      setToastMsg({ msg: 'Error deleting account.', type: 'error' });
-    } finally {
-      setPassLoading(false);
-    }
-  };
-
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -108,8 +76,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     const url = await StorageService.uploadPhoto(file, 'profiles');
     if (url) {
       setPic(url);
+      setToastMsg({ msg: 'Profilna slika učitana.', type: 'success' });
     } else {
-      setToastMsg({ msg: 'Greška pri uploadu slike.', type: 'error' });
+      setToastMsg({ msg: 'Upload nije uspio. Provjerite Storage Policies u Supabase dashboardu.', type: 'error' });
     }
     setIsUploading(false);
   };
@@ -121,6 +90,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     const url = await StorageService.uploadPhoto(files[0], 'gallery');
     if (url) {
       setGallery(prev => [...prev, url]);
+      setToastMsg({ msg: 'Rad dodan u galeriju.', type: 'success' });
     } else {
       setToastMsg({ msg: 'Greška pri uploadu u galeriju.', type: 'error' });
     }
@@ -128,7 +98,11 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   };
 
   const handleSave = async () => {
-    if (!fullName || !neighborhood) return;
+    if (!fullName || !neighborhood) {
+      setToastMsg({ msg: 'Ime i kvart su obvezni.', type: 'error' });
+      return;
+    }
+    
     setIsLoading(true);
     const barbers = await db.getBarbers();
     const existing = barbers.find(b => b.userId === userId);
@@ -138,23 +112,27 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       fullName,
       profilePicture: pic,
       neighborhood,
-      address,
-      zipCode,
-      city,
-      bio,
-      gallery,
-      workMode,
+      address: address || '',
+      zipCode: zipCode || '',
+      city: city || 'Zagreb',
+      bio: bio || '',
+      gallery: gallery || [],
+      workMode: workMode || 'classic',
       approved: existing ? existing.approved : false,
       createdAt: existing ? existing.createdAt : new Date().toISOString()
     };
+
+    if (existing?.id) profile.id = existing.id;
     
-    const success = await db.saveBarbers(profile);
+    const result = await db.saveBarbers(profile);
     setIsLoading(false);
-    if (success) {
+    
+    if (result.success) {
       setToastMsg({ msg: t.done, type: 'success' });
-      setTimeout(onComplete, 1000);
+      setTimeout(onComplete, 1200);
     } else {
-      setToastMsg({ msg: 'Greška pri spremanju profila.', type: 'error' });
+      // Show exact DB error to help debugging
+      setToastMsg({ msg: `Spremanje nije uspjelo: ${result.error || 'Provjerite RLS polise za tablicu barbers'}`, type: 'error' });
     }
   };
 
@@ -164,12 +142,12 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       <div className="premium-blur bg-white/5 border border-white/10 rounded-[2.5rem] p-8 text-center space-y-6">
         <div className="relative w-28 h-28 mx-auto group">
           <div className={`w-full h-full rounded-[2.25rem] overflow-hidden border-4 border-white/5 shadow-2xl relative ${isUploading ? 'opacity-50' : ''}`}>
-             <img src={pic} className="w-full h-full object-cover grayscale" alt="Avatar" />
+             <img src={pic} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="Avatar" />
              {isUploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-[#D4AF37]" /></div>}
           </div>
           <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute -bottom-2 -right-2 w-10 h-10 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black shadow-xl active:scale-90"
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+            className="absolute -bottom-2 -right-2 w-11 h-11 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black shadow-xl active:scale-90 border-4 border-black"
           >
             <Camera size={20} />
           </button>
@@ -197,16 +175,24 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
            <Input label="Grad" value={city} onChange={setCity} placeholder="Zagreb" />
         </div>
         
-        <div className="space-y-2">
+        <div className="space-y-3">
           <label className="text-[9px] font-black text-zinc-600 ml-4 uppercase tracking-[0.2em]">O vama (Bio)</label>
-          <textarea value={bio} onChange={(e) => setBio(e.target.value)} className="w-full bg-zinc-900/60 border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-[#D4AF37]/40 outline-none transition-all text-xs font-bold min-h-[100px]" />
+          <textarea 
+            value={bio} 
+            onChange={(e) => setBio(e.target.value)} 
+            placeholder="Kratki opis vašeg rada..."
+            className="w-full bg-zinc-900/60 border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-[#D4AF37]/40 outline-none transition-all text-[13px] font-medium min-h-[120px] shadow-inner" 
+          />
         </div>
 
         <section className="space-y-4">
            <div className="flex justify-between items-center px-4">
               <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova</label>
-              <button onClick={() => galleryInputRef.current?.click()} className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
-                 <Plus size={14} /> Dodaj sliku
+              <button 
+                onClick={() => !isUploading && galleryInputRef.current?.click()} 
+                className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-2 px-3 py-2 bg-[#D4AF37]/5 rounded-xl border border-[#D4AF37]/10"
+              >
+                 {isUploading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Dodaj sliku
               </button>
               <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleGalleryUpload} />
            </div>
@@ -214,8 +200,11 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
            <div className="grid grid-cols-3 gap-3">
               {gallery.map((img, i) => (
                 <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-white/5 bg-zinc-900 group">
-                   <img src={img} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" />
-                   <button onClick={() => setGallery(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 w-6 h-6 bg-red-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                   <img src={img} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                   <button 
+                    onClick={() => setGallery(prev => prev.filter((_, idx) => idx !== i))} 
+                    className="absolute top-1.5 right-1.5 w-7 h-7 bg-red-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl"
+                   >
                      <Trash2 size={12} className="text-white" />
                    </button>
                 </div>
@@ -223,9 +212,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
            </div>
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-4 pt-6">
           <div className="flex items-center gap-3 ml-4">
-             <Lock size={12} className="text-[#D4AF37]" />
+             <ShieldCheck size={12} className="text-emerald-500" />
              <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Sigurnost i Postavke</p>
           </div>
           <Card className="p-6 bg-zinc-950 border-white/5 space-y-4">
@@ -235,30 +224,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
             >
               <Sparkles size={14} /> {t.support}
             </button>
-
-            {!isChangingPass ? (
-              <button 
-                onClick={() => setIsChangingPass(true)}
-                className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest hover:border-[#D4AF37]/30 transition-all flex items-center justify-center gap-3"
-              >
-                <Lock size={14} /> Promijeni lozinku
-              </button>
-            ) : (
-              <div className="space-y-4 animate-slide-up">
-                <Input 
-                  label={t.newPassword} 
-                  type="password" 
-                  value={newPass} 
-                  onChange={setNewPass} 
-                  placeholder="Unesite novu lozinku..."
-                />
-                <div className="flex gap-2">
-                  <Button variant="secondary" className="h-12 text-[8px] rounded-xl" onClick={() => setIsChangingPass(false)}>{t.cancel}</Button>
-                  <Button variant="primary" loading={passLoading} className="h-12 text-[8px] rounded-xl" onClick={handleChangePassword}>{t.confirm}</Button>
-                </div>
-              </div>
-            )}
-
             <button 
               onClick={() => setIsLegalOpen(true)}
               className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest hover:border-[#D4AF37]/30 transition-all flex items-center justify-center gap-3"
@@ -268,32 +233,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
           </Card>
         </section>
 
-        <section className="space-y-4 pt-4">
-          <div className="flex items-center gap-3 ml-4">
-             <AlertTriangle size={12} className="text-red-500" />
-             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t.dangerZone}</p>
-          </div>
-          <Card className="p-6 bg-red-500/5 border-red-500/10 space-y-4">
-             {isDeleting ? (
-               <div className="space-y-4 animate-lux-fade">
-                 <p className="text-[10px] text-red-500 font-black uppercase text-center">{t.confirmDeleteAccount}</p>
-                 <div className="flex gap-2">
-                    <button onClick={() => setIsDeleting(false)} className="flex-1 py-4 bg-zinc-900 rounded-xl text-[9px] font-black uppercase tracking-widest">{t.cancel}</button>
-                    <button onClick={handleDeleteAccount} className="flex-1 py-4 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl">{t.delete}</button>
-                 </div>
-               </div>
-             ) : (
-               <button 
-                  onClick={() => setIsDeleting(true)}
-                  className="w-full py-4 border border-red-500/20 rounded-2xl text-[9px] font-black text-red-500/60 uppercase tracking-widest hover:text-red-500 transition-all flex items-center justify-center gap-3"
-                >
-                  <Trash2 size={14} /> {t.deleteAccount}
-                </button>
-             )}
-          </Card>
-        </section>
-
-        <Button className="w-full h-18 text-xs font-black shadow-2xl" onClick={handleSave} loading={isLoading}>Spremi profil</Button>
+        <Button className="w-full h-20 text-xs font-black shadow-[0_25px_60px_rgba(212,175,55,0.2)]" onClick={handleSave} loading={isLoading}>
+          Spremi profil
+        </Button>
       </div>
 
       <LegalModal isOpen={isLegalOpen} onClose={() => setIsLegalOpen(false)} lang={lang} />
