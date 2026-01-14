@@ -1,0 +1,9 @@
+{
+  "name": "trimly",
+  "description": "A premium mobile-first barber booking application for Zagreb, featuring role-based dashboards for customers, barbers, and admins.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera",
+    "microphone"
+  ]
+}
