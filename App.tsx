@@ -19,13 +19,14 @@ import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminBarbers from './screens/admin/AdminBarbers';
 import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { 
   Lock,
   Loader2,
   LogOut,
   ShieldCheck
 } from 'lucide-react';
-import { Toast, Button, Card } from './components/UI';
+import { Toast, Button } from './components/UI';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -64,7 +65,7 @@ const App: React.FC = () => {
 
     initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
       if (event === 'SIGNED_IN' && session) {
         await handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
@@ -87,7 +88,7 @@ const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings' },
-        (payload) => {
+        (payload: any) => {
           const newB = payload.new as Booking;
           if (user.role === 'customer' && newB.customerId === user.id && newB.status === 'accepted') {
             setToast({ 
@@ -156,13 +157,11 @@ const App: React.FC = () => {
       setSelectedBarberId(null);
       setActiveTab('home');
       db.setActiveUser(null);
-      // Očisti i sve mock cache-ove za sigurnost
       localStorage.removeItem('bb_barbers_cache');
       localStorage.removeItem('bb_services_cache');
       localStorage.removeItem('bb_bookings_cache');
     } catch (e) {
       console.error("Logout error:", e);
-      // Force UI reset even if Supabase fails
       setUser(null);
     }
   };
@@ -253,7 +252,7 @@ const App: React.FC = () => {
           onTabChange={setActiveTab} 
           onLogout={handleLogout}
           lang={lang}
-          hideShell={!!selectedBarberId || (user.role === 'barber' && barberProfile && !barberProfile.approved)} 
+          hideShell={!!selectedBarberId || !!(user.role === 'barber' && barberProfile && !barberProfile.approved)} 
           title={user.role === 'admin' ? 'Network Admin' : user.role === 'barber' ? 'Barber Dashboard' : 'Trimly Network'}
         >
           {renderView()}
