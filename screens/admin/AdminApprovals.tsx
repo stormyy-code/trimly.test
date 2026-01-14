@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { BarberProfile } from '../../types';
-import { Card, Button, Badge } from '../../components/UI';
+import { Card, Button, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Check, X, ShieldAlert, User as UserIcon, Loader2, RefreshCcw } from 'lucide-react';
+import { Check, X, ShieldAlert, User as UserIcon, Loader2, RefreshCcw, Mail, AlertTriangle } from 'lucide-react';
 
 interface AdminApprovalsProps {
   lang: Language;
@@ -13,17 +13,18 @@ interface AdminApprovalsProps {
 const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
   const [pending, setPending] = useState<BarberProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const t = translations[lang];
 
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
-      // Direct call to Supabase through the db object
       const barbers = await db.getBarbers();
-      const filtered = barbers.filter(b => b.approved === false);
+      const filtered = barbers.filter(b => b.approved === false || b.approved === null);
       setPending(filtered);
-    } catch (error) {
-      console.error("Fetch pending error:", error);
+    } catch (err) {
+      console.error("Fetch pending error:", err);
     } finally {
       setLoading(false);
     }
@@ -33,87 +34,119 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
     fetchPending();
   }, [fetchPending]);
 
-  const handleAction = async (barberId: string, approve: boolean) => {
-    if (approve) {
-      const success = await db.saveBarbers({ id: barberId, approved: true });
-      if (success) {
-        setPending(prev => prev.filter(b => b.id !== barberId));
+  const handleAction = async (barber: BarberProfile, approve: boolean) => {
+    setProcessingId(barber.id);
+    setError(null);
+    try {
+      if (approve) {
+        const barberSuccess = await db.approveBarber(barber.id);
+        if (!barberSuccess) throw new Error("Neuspješno odobravanje barbera.");
+        
+        const profileSuccess = await db.updateProfileRole(barber.userId, 'barber');
+        if (!profileSuccess) throw new Error("Neuspješna promjena uloge.");
+
+        setPending(prev => prev.filter(p => p.id !== barber.id));
+      } else {
+        setPending(prev => prev.filter(p => p.id !== barber.id));
       }
-    } else {
-      // In a real app, we might update a 'rejected' status or delete
-      // For simplicity, we just refresh the list after a manual deletion if we had that logic
-      fetchPending();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  if (loading) {
+  if (loading && pending.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
-        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Provjera novih brijača...</p>
+      <div className="flex flex-col items-center justify-center h-96 space-y-6">
+        <Loader2 className="animate-spin text-[#D4AF37]" size={40} />
+        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-600 animate-pulse text-center">
+          Pristupanje bazi...<br/>Zagreb Network Auth
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-slide-up pb-12">
-      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 ios-shadow flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">{lang === 'hr' ? 'Hub za autorizaciju' : 'Authorization Hub'}</p>
-          <h2 className="text-3xl font-black text-white">{lang === 'hr' ? 'Na čekanju' : 'Pending'}</h2>
+    <div className="space-y-8 animate-slide-up pb-32">
+      {error && <Toast message={error} type="error" onClose={() => setError(null)} />}
+      
+      <div className="premium-blur bg-zinc-900/20 rounded-[3rem] p-10 border border-white/10 ios-shadow flex flex-col items-center gap-4">
+        <div className="w-16 h-16 bg-amber-500 rounded-[2rem] flex items-center justify-center text-black shadow-2xl relative">
+           <ShieldAlert size={32} />
+           <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full border-4 border-black flex items-center justify-center text-[10px] font-black text-white">
+             {pending.length}
+           </div>
         </div>
-        <div className="w-14 h-14 bg-yellow-500 rounded-2xl flex items-center justify-center text-black shadow-2xl">
-          <ShieldAlert size={28} />
+        <div className="text-center">
+          <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter leading-none">Autorizacija</h2>
+          <p className="text-zinc-500 text-[8px] font-black uppercase tracking-[0.4em] mt-3">Verified Partners Hub</p>
         </div>
       </div>
 
-      <div className="px-4">
+      <div className="px-2">
         <button 
           onClick={fetchPending}
-          className="flex items-center gap-2 px-6 py-3 bg-white/5 rounded-full border border-white/10 text-[9px] font-black text-[#D4AF37] uppercase tracking-widest active:scale-95 transition-all"
+          className="flex items-center gap-3 px-6 py-4 bg-zinc-950 rounded-2xl border border-white/5 text-[9px] font-black text-zinc-500 uppercase tracking-widest active:scale-95 transition-all shadow-xl"
         >
-          <RefreshCcw size={14} />
-          {lang === 'hr' ? 'Osvježi listu' : 'Refresh List'}
+          <RefreshCcw size={14} className={loading ? 'animate-spin' : ''} />
+          Osvježi Zahtjeve
         </button>
       </div>
 
       {pending.length === 0 ? (
-        <div className="py-32 text-center space-y-4 opacity-30">
-          <div className="relative mx-auto w-16 h-16 bg-white/5 rounded-full flex items-center justify-center border border-dashed border-white/10">
-            <UserIcon size={32} />
+        <div className="py-32 text-center space-y-6 opacity-40">
+          <div className="mx-auto w-24 h-24 bg-zinc-900 rounded-[2.5rem] flex items-center justify-center border border-dashed border-white/20">
+            <UserIcon size={40} className="text-zinc-700" />
           </div>
-          <p className="text-gray-500 font-black uppercase tracking-[0.3em] text-[10px]">
-            {lang === 'hr' ? 'Nema novih brijača za odobrenje' : 'No new barbers for approval'}
-          </p>
+          <p className="text-zinc-600 font-black uppercase tracking-[0.4em] text-[9px]">Svi zahtjevi su obrađeni</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 px-1">
           {pending.map(barber => (
-            <Card key={barber.id} className="p-8 space-y-8 border-white/[0.03] animate-lux-fade">
-              <div className="flex gap-6">
-                <img src={barber.profilePicture} className="w-20 h-20 rounded-[1.5rem] object-cover border border-white/5 shadow-2xl grayscale" alt="" />
-                <div className="py-1">
-                  <h3 className="font-black text-xl text-white tracking-tight italic uppercase">{barber.fullName}</h3>
-                  <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1 opacity-60">{barber.neighborhood}</p>
+            <Card key={barber.id} className="p-8 space-y-8 border-white/[0.05] bg-zinc-950/40 relative overflow-hidden group">
+              {processingId === barber.id && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+                  <Loader2 className="animate-spin text-[#D4AF37]" />
+                </div>
+              )}
+              
+              <div className="flex gap-8">
+                <div className="w-24 h-24 rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700">
+                   <img src={barber.profilePicture} className="w-full h-full object-cover" alt="" />
+                </div>
+                <div className="flex-1 py-1 space-y-4">
+                  <h3 className="font-black text-2xl text-white tracking-tighter italic uppercase leading-none">{barber.fullName}</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="neutral" className="bg-white/5">{barber.neighborhood}</Badge>
+                    <Badge variant="gold" className="text-[7px]">{barber.workMode}</Badge>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-[9px] font-black text-zinc-500 uppercase tracking-widest">
-                  <Badge variant="gold">{barber.workMode}</Badge>
-                  <span>Dodano: {new Date(barber.createdAt).toLocaleDateString()}</span>
+              <div className="space-y-4 p-6 bg-black/40 rounded-3xl border border-white/5">
+                <div className="flex items-center gap-3 text-zinc-500">
+                   <Mail size={14} className="text-[#D4AF37]" />
+                   <span className="text-[10px] font-bold lowercase tracking-normal">{barber.userId}</span>
                 </div>
-                <p className="text-xs text-gray-400 font-medium leading-relaxed italic opacity-80 border-l-2 border-[#D4AF37]/40 pl-4">
-                  "{barber.bio}"
+                <p className="text-xs text-zinc-400 font-medium leading-relaxed italic border-l-2 border-[#D4AF37]/40 pl-4">
+                  "{barber.bio || 'Barber nije dostavio biografiju.'}"
                 </p>
               </div>
 
-              <div className="flex gap-4 pt-4">
-                <Button variant="secondary" className="flex-1 h-14" onClick={() => handleAction(barber.id, false)}>
-                  <X size={16} strokeWidth={3} /> {t.decline}
-                </Button>
-                <Button variant="primary" className="flex-1 h-14" onClick={() => handleAction(barber.id, true)}>
-                  <Check size={16} strokeWidth={3} /> {lang === 'hr' ? 'Odobri' : 'Approve'}
+              <div className="flex gap-4">
+                <button 
+                  className="flex-1 h-16 rounded-2xl border border-zinc-800 text-[10px] font-black uppercase tracking-widest text-zinc-500" 
+                  onClick={() => handleAction(barber, false)}
+                >
+                  <X size={18} className="inline mr-2" /> ODBIJ
+                </button>
+                <Button 
+                  variant="primary" 
+                  className="flex-[2] h-16 rounded-2xl shadow-[0_15px_40px_rgba(212,175,55,0.1)]" 
+                  onClick={() => handleAction(barber, true)}
+                >
+                  <Check size={18} className="inline mr-2" /> ODOBRI PRISTUP
                 </Button>
               </div>
             </Card>
@@ -122,6 +155,6 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
       )}
     </div>
   );
-};
+}
 
 export default AdminApprovals;

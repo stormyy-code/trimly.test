@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../../store/supabase';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { User, UserRole } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { Button, Input, Toast } from '../../components/UI';
@@ -29,10 +29,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
   const t = translations[lang];
 
   const createProfileRecord = async (userId: string, userEmail: string, userRole: UserRole) => {
+    const dbRole = userRole === 'customer' ? 'customer' : userRole;
+    
     const { error: profileError } = await supabase.from('profiles').insert([{ 
       id: userId, 
       email: userEmail, 
-      role: userRole 
+      role: dbRole 
     }]);
 
     if (profileError) throw profileError;
@@ -44,7 +46,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
     setLoading(true);
 
     if (role === 'barber' && inviteCode !== BARBER_INVITE_CODE) {
-      setError(lang === 'hr' ? 'Pogrešan brijački kod' : 'Wrong barber code');
+      setError(lang === 'hr' ? 'Pogrešan barber kod' : 'Wrong barber code');
       setLoading(false);
       return;
     }
@@ -139,8 +141,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
   return (
     <div className="flex flex-col min-h-screen px-8 pt-12 pb-12 bg-[#0A0A0A] text-white overflow-y-auto animate-lux-fade items-center w-full justify-center">
        <div className="absolute top-12 flex bg-white/5 border border-white/10 rounded-full p-1 ios-shadow">
-        <button onClick={() => setLang('hr')} className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${lang === 'hr' ? 'bg-[#D4AF37] text-black' : 'text-zinc-500'}`}>HR</button>
-        <button onClick={() => setLang('en')} className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${lang === 'en' ? 'bg-[#D4AF37] text-black' : 'text-zinc-500'}`}>EN</button>
+        <button onClick={() => setLang('hr')} className={`px-4 py-1.5 rounded-full text-[8px] font-black transition-all ${lang === 'hr' ? 'bg-[#D4AF37] text-black' : 'text-zinc-500'}`}>HR</button>
+        <button onClick={() => setLang('en')} className={`px-4 py-1.5 rounded-full text-[8px] font-black transition-all ${lang === 'en' ? 'bg-[#D4AF37] text-black' : 'text-zinc-500'}`}>EN</button>
       </div>
 
       <div className="w-full max-w-xs mt-12 pb-12">
@@ -168,7 +170,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
              <Input label={t.barberCode} placeholder="••••••••" value={inviteCode} onChange={setInviteCode} required />
            )}
 
-           <Button type="submit" loading={loading} className="w-full h-20 text-xs font-black uppercase tracking-[0.2em] mt-6 shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
+           <div className="px-4 text-center">
+             <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest leading-loose">
+               {t.legalAgreement} <a href="https://sites.google.com/view/trimly-privacy-policy/po%C4%8Detna-stranica" target="_blank" className="text-[#D4AF37] underline">{t.privacy}</a>
+             </p>
+           </div>
+
+           <Button type="submit" loading={loading} className="w-full h-20 text-xs font-black uppercase tracking-[0.2em] mt-2 shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
              {t.signup}
            </Button>
         </form>
@@ -186,6 +194,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
       </div>
     </div>
   );
-};
+}
 
 export default RegisterScreen;

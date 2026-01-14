@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { db } from '../../store/mockDatabase';
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { db } from '../../store/database';
 import { BarberProfile } from '../../types';
 import { Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { MapPin, Search, Map as MapIcon, List, Trophy, Sparkles, Loader2, Crown, Star } from 'lucide-react';
+import { MapPin, Search, Map as MapIcon, List, Trophy, Sparkles, Loader2, Crown, Star, ArrowDownNarrowWide, SlidersHorizontal } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 
 interface CustomerHomeProps {
@@ -11,35 +12,89 @@ interface CustomerHomeProps {
   lang: Language;
 }
 
+type SortType = 'recommended' | 'price-low' | 'top-rated' | 'most-reviewed';
+
 const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'list' | 'map'>('list');
+  const [sortType, setSortType] = useState<SortType>('recommended');
   const [isSearchingMaps, setIsSearchingMaps] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   const t = translations[lang];
+  
+  useEffect(() => {
+    const sync = async () => {
+      await Promise.all([db.getBarbers(), db.getReviews(), db.getServices()]);
+      setRefresh(prev => prev + 1);
+    };
+    sync();
+  }, []);
+
   const barbers = db.getBarbersSync().filter(b => b.approved);
+  const allReviews = db.getReviewsSync();
+  const allServices = db.getServicesSync();
   
   const featuredBarbers = useMemo(() => barbers.filter(b => b.featured), [barbers]);
 
-  const filteredBarbers = barbers.filter(b => {
-    const matchQuarter = selectedQuarter === 'All' || b.neighborhood === selectedQuarter;
-    const matchSearch = b.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                      b.bio.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchQuarter && matchSearch;
-  });
+  const filteredBarbers = useMemo(() => {
+    let result = barbers.filter(b => {
+      const matchQuarter = selectedQuarter === 'All' || b.neighborhood === selectedQuarter;
+      const matchSearch = b.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        b.bio.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchQuarter && matchSearch;
+    }).map(barber => {
+      const bReviews = allReviews.filter(r => r.barberId === barber.id);
+      const bServices = allServices.filter(s => s.barberId === barber.id);
+      
+      const avg = bReviews.length 
+        ? (bReviews.reduce((sum, r) => sum + r.rating, 0) / bReviews.length)
+        : 0;
+      
+      const minPrice = bServices.length
+        ? Math.min(...bServices.map(s => s.price))
+        : 0;
+
+      return { 
+        ...barber, 
+        avgRating: avg, 
+        reviewCount: bReviews.length,
+        minPrice
+      };
+    });
+
+    switch (sortType) {
+      case 'price-low':
+        result.sort((a, b) => (a.minPrice || 999) - (b.minPrice || 999));
+        break;
+      case 'top-rated':
+        result.sort((a, b) => b.avgRating - a.avgRating);
+        break;
+      case 'most-reviewed':
+        result.sort((a, b) => b.reviewCount - a.reviewCount);
+        break;
+      case 'recommended':
+      default:
+        result.sort((a, b) => {
+          if (a.featured !== b.featured) return a.featured ? -1 : 1;
+          return b.avgRating - a.avgRating;
+        });
+        break;
+    }
+
+    return result;
+  }, [barbers, allReviews, allServices, selectedQuarter, searchQuery, sortType]);
 
   const handleExploreOnMaps = async () => {
     setIsSearchingMaps(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      // Fix: Using gemini-2.5-flash as Google Maps grounding is only supported in Gemini 2.5 series models.
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: "Find high quality barbershops in Zagreb city center and list them.",
+        contents: "Find high quality barbershops in Zagreb city center and list them as links.",
         config: { tools: [{ googleMaps: {} }] },
       });
-      console.log(response.candidates?.[0]?.groundingMetadata?.groundingChunks);
     } catch (e) {
       console.error(e);
     } finally { setIsSearchingMaps(false); }
@@ -71,19 +126,36 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
           </button>
         </div>
 
-        <div className="relative group px-1">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-700" size={16} />
-          <input
-            type="text"
-            placeholder={t.search}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#0F0F0F] rounded-2xl pl-14 pr-6 py-5 border border-white/5 focus:border-[#C5A059] outline-none transition-all text-white text-xs font-bold shadow-2xl"
-          />
+        <div className="space-y-4 px-1">
+          <div className="relative group">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-700" size={16} />
+            <input
+              type="text"
+              placeholder={t.search}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#0F0F0F] rounded-2xl pl-14 pr-6 py-5 border border-white/5 focus:border-[#C5A059] outline-none transition-all text-white text-xs font-bold shadow-2xl"
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
+             <button onClick={() => setSortType('recommended')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'recommended' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
+               <Sparkles size={12} /> {t.sortRecommended}
+             </button>
+             <button onClick={() => setSortType('price-low')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'price-low' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
+               <ArrowDownNarrowWide size={12} /> {t.sortPriceLow}
+             </button>
+             <button onClick={() => setSortType('top-rated')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'top-rated' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
+               <Star size={12} /> {t.sortTopRated}
+             </button>
+             <button onClick={() => setSortType('most-reviewed')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'most-reviewed' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
+               <Trophy size={12} /> {t.sortMostReviews}
+             </button>
+          </div>
         </div>
       </section>
 
-      {viewType === 'list' && featuredBarbers.length > 0 && (
+      {viewType === 'list' && featuredBarbers.length > 0 && searchQuery === '' && (
         <section className="space-y-5 animate-slide-up">
            <div className="flex items-center gap-2 px-1">
              <Crown size={14} className="text-[#D4AF37]" />
@@ -111,10 +183,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
           <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#C5A059_1px,transparent_1px)] [background-size:24px_24px]"></div>
           {filteredBarbers.map((b) => (
             <div key={b.id} className="absolute" style={{ top: `${Math.random() * 70 + 15}%`, left: `${Math.random() * 70 + 15}%` }}>
-              <button 
-                onClick={() => onSelectBarber(b.id)}
-                className="p-1.5 rounded-full ring-2 ring-[#C5A059]/30 bg-black hover:scale-110 transition-all shadow-2xl"
-              >
+              <button onClick={() => onSelectBarber(b.id)} className="p-1.5 rounded-full ring-2 ring-[#C5A059]/30 bg-black hover:scale-110 transition-all shadow-2xl">
                 <SafeImage src={b.profilePicture} className="w-12 h-12 rounded-full object-cover grayscale border-2 border-black" />
               </button>
             </div>
@@ -129,8 +198,10 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
       ) : (
         <div className="grid grid-cols-1 gap-4 px-1">
           <div className="flex items-center gap-2 mb-2">
-            <List size={14} className="text-zinc-700" />
-            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.3em]">Aktivni Članovi</span>
+            <SlidersHorizontal size={14} className="text-zinc-700" />
+            <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.3em]">
+              {filteredBarbers.length} {t.allProfessionals}
+            </span>
           </div>
           {filteredBarbers.map(barber => (
             <Card key={barber.id} className={`flex gap-5 p-5 bg-[#0a0a0a] active:bg-zinc-950 transition-all rounded-[2.25rem] group border ${barber.weeklyWinner ? 'border-[#D4AF37]/50 shadow-[0_15px_50px_rgba(212,175,55,0.1)]' : 'border-white/5'}`} onClick={() => onSelectBarber(barber.id)}>
@@ -146,9 +217,19 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
                       <span className="text-zinc-600 text-[8px] font-black uppercase tracking-widest truncate">{barber.neighborhood}</span>
                    </div>
                 </div>
-                <div className="flex items-center gap-1">
-                   <Star size={10} className="text-[#D4AF37] fill-current" />
-                   <span className="text-zinc-500 text-[9px] font-bold">4.9 (124)</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                     <Star size={10} className={`${barber.avgRating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'}`} />
+                     <span className="text-zinc-500 text-[9px] font-bold">
+                       {barber.avgRating ? `${barber.avgRating.toFixed(1)} (${barber.reviewCount})` : 'Novi član'}
+                     </span>
+                  </div>
+                  {barber.minPrice > 0 && (
+                    <span className="text-white text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-zinc-600 mr-1">{t.startingFrom}</span>
+                      {barber.minPrice}€
+                    </span>
+                  )}
                 </div>
               </div>
             </Card>

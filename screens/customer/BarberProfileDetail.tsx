@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { Service, Booking, User } from '../../types';
 import { Button, Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
@@ -24,12 +24,11 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
 
-  // Safety check for TypeScript and UX
   if (!barber) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10 text-center">
-        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Barber profile not found</p>
-        <Button onClick={onBack}>Back to Explore</Button>
+        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Barber profil nije pronađen</p>
+        <Button onClick={onBack}>Povratak na istraživanje</Button>
       </div>
     );
   }
@@ -143,7 +142,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         {lang === 'hr' ? 'Zahtjev poslan!' : 'Request Sent!'}
       </h2>
       <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mt-6 max-w-[240px] leading-relaxed">
-        {lang === 'hr' ? 'Brijač će primiti obavijest i potvrditi vaš termin u najkraćem roku.' : 'The barber will receive a notification and confirm your slot shortly.'}
+        {lang === 'hr' ? 'Barber će primiti obavijest i potvrditi vaš termin u najkraćem roku.' : 'The barber will receive a notification and confirm your slot shortly.'}
       </p>
       <Button onClick={onBack} className="mt-12 w-full h-18 text-[11px] font-black tracking-widest uppercase shadow-2xl">Završi</Button>
     </div>
@@ -236,20 +235,10 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           {selectedDate && (
             <div className="grid grid-cols-4 gap-3">
               {timeSlots.map(slot => (
-                <button 
-                  key={slot.time} 
-                  disabled={slot.isTaken}
-                  onClick={() => setSelectedTime(slot.time)} 
-                  className={`py-4 rounded-2xl border text-[9px] font-black tracking-widest transition-all ${slot.isTaken ? 'bg-zinc-950/20 text-zinc-900 border-transparent opacity-20 cursor-not-allowed' : selectedTime === slot.time ? 'bg-white text-black border-white shadow-2xl scale-105' : 'bg-zinc-950 text-zinc-600 border-white/5 hover:border-white/20'}`}
-                >
+                <button key={slot.time} disabled={slot.isTaken} onClick={() => setSelectedTime(slot.time)} className={`py-4 rounded-2xl border text-[9px] font-black tracking-widest transition-all ${slot.isTaken ? 'bg-zinc-950/20 text-zinc-900 border-transparent opacity-20 cursor-not-allowed' : selectedTime === slot.time ? 'bg-white text-black border-white shadow-2xl scale-105' : 'bg-zinc-950 text-zinc-600 border-white/5 hover:border-white/20'}`}>
                   {slot.time}
                 </button>
               ))}
-              {timeSlots.length === 0 && (
-                <div className="col-span-4 py-8 text-center text-zinc-600 text-[9px] font-black uppercase tracking-widest italic opacity-50">
-                  {lang === 'hr' ? 'Brijač danas ne radi ili nema slobodnih termina' : 'Barber is closed or fully booked today'}
-                </div>
-              )}
             </div>
           )}
           <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-20 text-xs font-black uppercase tracking-[0.3em] shadow-[0_25px_60px_rgba(212,175,55,0.2)]">

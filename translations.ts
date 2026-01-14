@@ -1,3 +1,4 @@
+
 export type Language = 'hr' | 'en';
 
 export const translations = {
@@ -7,13 +8,21 @@ export const translations = {
     signup: 'Registracija',
     email: 'E-mail adresa',
     password: 'Lozinka',
+    forgotPassword: 'Zaboravili ste lozinku?',
+    resetPassword: 'Resetiraj lozinku',
+    sendResetLink: 'Pošalji link za reset',
+    backToLogin: 'Povratak na prijavu',
+    resetLinkSent: 'Link za resetiranje je poslan na vaš email!',
+    changePassword: 'Promijeni lozinku',
+    newPassword: 'Nova lozinka',
+    passwordUpdated: 'Lozinka uspješno promijenjena!',
     noAccount: 'Nemate račun?',
     haveAccount: 'Već imate račun?',
     joinNetwork: 'Pridruži se mreži',
     client: 'Klijent',
-    barber: 'Brijač',
+    barber: 'Barber',
     adminRole: 'Admin',
-    barberCode: 'Brijački kod',
+    barberCode: 'Barber kod',
     adminCode: 'Master kod',
     verifyEmail: 'Potvrda e-maila',
     secureAccess: 'Siguran pristup',
@@ -22,7 +31,7 @@ export const translations = {
     smtpError: 'SMTP Greška: Email servis nije spreman.',
     emailDisabled: 'E-mail registracije su isključene u Supabase postavkama.',
     welcome: 'DOBRODOŠLI',
-    network: 'Zagrebačka mreža brijača',
+    network: 'Zagrebačka mreža barbera',
     createAccount: 'Otvori račun',
     verifyCode: 'Potvrdi kod',
     enterOtp: 'Unesite 6-znamenkasti kod poslan na vaš email',
@@ -30,6 +39,7 @@ export const translations = {
     checkEmail: 'Provjerite svoj email',
     back: 'Natrag',
     or: 'ili',
+    legalAgreement: 'Registracijom prihvaćate naše',
 
     // Navigation
     explore: 'Istraži',
@@ -40,7 +50,7 @@ export const translations = {
     schedule: 'Raspored',
     services: 'Usluge',
     settings: 'Postavke',
-    barbers: 'Brijači',
+    barbers: 'Barberi',
     approvals: 'Odobrenja',
     logout: 'Odjava',
 
@@ -55,6 +65,22 @@ export const translations = {
     loading: 'Učitavanje...',
     noData: 'Trenutno nema podataka',
     seedData: 'Generiraj demo podatke',
+    legal: 'Pravne informacije',
+    terms: 'Uvjeti korištenja',
+    privacy: 'Politika privatnosti',
+    support: 'Podrška i Pomoć',
+    readFullPolicy: 'Pročitaj službeni dokument',
+    askAI: 'Pitaj Trimly AI',
+    deleteAccount: 'Obriši korisnički račun',
+    confirmDeleteAccount: 'Jeste li sigurni? Ova radnja je trajna.',
+    dangerZone: 'Zona opasnosti',
+
+    // Filters & Sorting
+    sortRecommended: 'Preporučeno',
+    sortPriceLow: 'Najjeftinije',
+    sortTopRated: 'Najbolje ocjene',
+    sortMostReviews: 'Najpopularnije',
+    startingFrom: 'Od',
 
     // Availability
     slotInterval: 'Interval termina',
@@ -67,17 +93,17 @@ export const translations = {
     // Admin
     registryControl: 'Administracija baze',
     professionals: 'Članovi mreže',
-    activeRegistry: 'Aktivni brijači',
+    activeRegistry: 'Aktivni barberi',
     revokedLicenses: 'Oduzete licence',
     suspendAccount: 'Suspendiraj račun?',
     restoreAccess: 'Vrati pristup',
     yesSuspend: 'Da, suspendiraj',
-    noActiveBarbers: 'Trenutno nema aktivnih brijača',
+    noActiveBarbers: 'Trenutno nema aktivnih barbera',
     noRevokedProfiles: 'Nema oduzetih profila',
 
     // Customer
-    topRecommended: 'Preporučeni brijači',
-    allProfessionals: 'Svi brijači',
+    topRecommended: 'Preporučeni barberi',
+    allProfessionals: 'Svi barberi',
     bookNow: 'Rezerviraj',
     price: 'Cijena',
     pickTime: 'Odaberi vrijeme',
@@ -102,6 +128,14 @@ export const translations = {
     signup: 'Sign Up',
     email: 'Email',
     password: 'Password',
+    forgotPassword: 'Forgot Password?',
+    resetPassword: 'Reset Password',
+    sendResetLink: 'Send reset link',
+    backToLogin: 'Back to login',
+    resetLinkSent: 'Reset link sent to your email!',
+    changePassword: 'Change Password',
+    newPassword: 'New Password',
+    passwordUpdated: 'Password updated successfully!',
     noAccount: 'No account?',
     haveAccount: 'Have an account?',
     joinNetwork: 'Join the network',
@@ -125,6 +159,7 @@ export const translations = {
     checkEmail: 'Check your email',
     back: 'Back',
     or: 'or',
+    legalAgreement: 'By signing up, you agree to our',
 
     // Navigation
     explore: 'Explore',
@@ -150,6 +185,22 @@ export const translations = {
     loading: 'Loading...',
     noData: 'No data available yet',
     seedData: 'Generate Demo Data',
+    legal: 'Legal & Compliance',
+    terms: 'Terms of Service',
+    privacy: 'Privacy Policy',
+    support: 'Support & Help',
+    readFullPolicy: 'Read official document',
+    askAI: 'Ask Trimly AI',
+    deleteAccount: 'Delete Account',
+    confirmDeleteAccount: 'Are you sure? This action is permanent.',
+    dangerZone: 'Danger Zone',
+
+    // Filters & Sorting
+    sortRecommended: 'Recommended',
+    sortPriceLow: 'Cheapest',
+    sortTopRated: 'Top Rated',
+    sortMostReviews: 'Most Reviews',
+    startingFrom: 'From',
 
     // Availability
     slotInterval: 'Booking Interval',

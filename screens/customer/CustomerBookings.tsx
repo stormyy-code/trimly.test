@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { supabase } from '../../store/supabase';
 import { Booking, Review } from '../../types';
-import { Card, Badge, Button, Input } from '../../components/UI';
+import { Card, Badge, Button, Input, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
 import { Calendar, Clock, Star, RefreshCw, BellRing, Trash2, AlertCircle } from 'lucide-react';
 
@@ -19,14 +19,14 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
   const t = translations[lang];
 
   const fetchBookings = async () => {
+    setLoading(true);
     const all = await db.getBookings(customerId, 'customer');
-    setBookings(all.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    ));
+    setBookings(all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setLoading(false);
   };
 
@@ -48,14 +48,34 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
   const handleCancelBooking = async (id: string) => {
     if (!confirm(lang === 'hr' ? 'Sigurno želite otkazati ovaj termin?' : 'Are you sure you want to cancel this appointment?')) return;
     setActionLoading(id);
-    const all = db.getBookingsSync();
-    const updated = all.filter(b => b.id !== id);
-    const { error } = await supabase.from('bookings').delete().eq('id', id);
-    if (!error) {
-      db.saveBookings(updated);
+    const success = await db.deleteBooking(id);
+    if (success) {
+      setToast({ msg: 'Termin otkazan.', type: 'success' });
       fetchBookings();
     }
     setActionLoading(null);
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackBooking) return;
+    const newReview: Review = {
+      id: Math.random().toString(36).substr(2, 9),
+      bookingId: feedbackBooking.id,
+      barberId: feedbackBooking.barberId,
+      customerId: customerId,
+      customerEmail: feedbackBooking.customerEmail,
+      rating,
+      comment,
+      createdAt: new Date().toISOString()
+    };
+    const success = await db.createReview(newReview);
+    if (success) {
+      setToast({ msg: t.done, type: 'success' });
+      await db.getReviews();
+      setFeedbackBooking(null);
+      setComment('');
+      setRating(5);
+    }
   };
 
   const getStatusVariant = (status: string) => {
@@ -68,26 +88,9 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
     }
   };
 
-  const handleSubmitFeedback = () => {
-    if (!feedbackBooking) return;
-    const newReview: Review = {
-      id: Math.random().toString(36).substr(2, 9),
-      bookingId: feedbackBooking.id,
-      barberId: feedbackBooking.barberId,
-      customerId: customerId,
-      customerEmail: feedbackBooking.customerEmail,
-      rating,
-      comment,
-      createdAt: new Date().toISOString()
-    };
-    db.saveReviews([...db.getReviewsSync(), newReview]);
-    setFeedbackBooking(null);
-    setComment('');
-    setRating(5);
-  };
-
   return (
     <div className="space-y-8 animate-slide-up relative pb-20">
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       <div className="premium-blur bg-white/5 rounded-[2rem] p-8 border border-white/10 ios-shadow flex items-center justify-between">
         <div>
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">{lang === 'hr' ? 'Dnevnik termina' : 'Appointment Log'}</p>
@@ -107,7 +110,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
         </div>
       )}
 
-      {loading ? (
+      {loading && bookings.length === 0 ? (
         <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-zinc-800" /></div>
       ) : bookings.length === 0 ? (
         <div className="py-32 text-center opacity-30"><p className="text-gray-500 font-black uppercase tracking-[0.3em] text-[11px]">Nema zabilježenih aktivnosti</p></div>
@@ -133,11 +136,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
                   <div className="flex flex-col items-end gap-2">
                     <Badge variant={getStatusVariant(booking.status) as any}>{booking.status}</Badge>
                     {isPending && (
-                       <button 
-                        onClick={() => handleCancelBooking(booking.id)}
-                        disabled={actionLoading === booking.id}
-                        className="text-[8px] font-black text-red-500/60 uppercase tracking-widest hover:text-red-500 transition-colors flex items-center gap-1"
-                       >
+                       <button onClick={() => handleCancelBooking(booking.id)} disabled={actionLoading === booking.id} className="text-[8px] font-black text-red-500/60 uppercase tracking-widest hover:text-red-500 transition-colors flex items-center gap-1">
                          {actionLoading === booking.id ? '...' : <><Trash2 size={10} /> Otkazi</>}
                        </button>
                     )}
@@ -168,7 +167,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
                 {isAccepted && (
                   <div className="bg-emerald-500/10 rounded-2xl p-4 border border-emerald-500/20 flex items-center gap-3">
                     <BellRing size={14} className="text-emerald-500 animate-bounce" />
-                    <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Brijač vas očekuje u dogovoreno vrijeme!</p>
+                    <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Barber vas očekuje u dogovoreno vrijeme!</p>
                   </div>
                 )}
 
@@ -186,7 +185,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
           <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setFeedbackBooking(null)}></div>
           <Card className="relative w-full max-w-sm bg-[#0F0F0F] border border-[#C5A059]/30 rounded-[3rem] p-10 space-y-10 shadow-[0_50px_100px_rgba(0,0,0,1)]">
             <div className="text-center space-y-2">
-              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Ocjena brijača</h3>
+              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Ocjena barbera</h3>
               <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest">Podijelite svoje iskustvo</p>
             </div>
             <div className="flex justify-center gap-3">

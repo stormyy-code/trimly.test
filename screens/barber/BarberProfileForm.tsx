@@ -1,12 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
+import { supabase } from '../../store/supabase';
 import { StorageService } from '../../services/StorageService';
 import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
-import { Button, Input, Card } from '../../components/UI';
-import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2 } from 'lucide-react';
+import { Button, Input, Card, Toast } from '../../components/UI';
+import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle } from 'lucide-react';
+import LegalModal from '../../components/LegalModal';
+import SupportModal from '../../components/SupportModal';
 
 interface BarberProfileFormProps {
   userId: string;
@@ -27,13 +30,21 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [workMode, setWorkMode] = useState<WorkMode>('classic');
   const [pic, setPic] = useState('https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
   const [gallery, setGallery] = useState<string[]>([]);
+
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [newPass, setNewPass] = useState('');
+  const [passLoading, setPassLoading] = useState(false);
+  const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  const [isLegalOpen, setIsLegalOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadExisting = async () => {
-      const barbers = await db.getBarbersSync();
+      const barbers = await db.getBarbers();
       const existing = barbers.find(b => b.userId === userId);
       if (existing) {
         setFullName(existing.fullName);
@@ -52,6 +63,38 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     navigator.clipboard.writeText(BARBER_INVITE_CODE);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleChangePassword = async () => {
+    if (newPass.length < 6) {
+      setToastMsg({ msg: 'Lozinka mora imati barem 6 znakova.', type: 'error' });
+      return;
+    }
+    setPassLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      setToastMsg({ msg: t.passwordUpdated, type: 'success' });
+      setNewPass('');
+      setIsChangingPass(false);
+    } catch (err: any) {
+      setToastMsg({ msg: err.message, type: 'error' });
+    } finally {
+      setPassLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setPassLoading(true);
+    try {
+      await db.deleteAccount(userId);
+      await supabase.auth.signOut();
+      window.location.reload();
+    } catch (e) {
+      setToastMsg({ msg: 'Error deleting account.', type: 'error' });
+    } finally {
+      setPassLoading(false);
+    }
   };
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,6 +118,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const handleSave = async () => {
     if (!fullName || !neighborhood) return;
     setIsLoading(true);
+    const barbers = await db.getBarbers();
+    const existing = barbers.find(b => b.userId === userId);
     const profile: Partial<BarberProfile> = {
       userId,
       fullName,
@@ -84,8 +129,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       bio,
       gallery,
       workMode,
-      approved: true, // Auto-approval in demo mode, update as needed
-      createdAt: new Date().toISOString()
+      approved: existing ? existing.approved : false,
+      createdAt: existing ? existing.createdAt : new Date().toISOString()
     };
     const success = await db.saveBarbers(profile);
     setIsLoading(false);
@@ -94,6 +139,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
 
   return (
     <div className="space-y-10 pb-32 animate-slide-up overflow-x-hidden bg-black min-h-screen">
+      {toastMsg && <Toast message={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
       <div className="premium-blur bg-white/5 border border-white/10 rounded-[2.5rem] p-8 text-center space-y-6">
         <div className="relative w-28 h-28 mx-auto group">
           <div className={`w-full h-full rounded-[2.25rem] overflow-hidden border-4 border-white/5 shadow-2xl relative ${isUploading ? 'opacity-50' : ''}`}>
@@ -149,27 +195,84 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                    </button>
                 </div>
               ))}
-              {gallery.length < 3 && [...Array(3 - gallery.length)].map((_, i) => (
-                <div key={i} className="aspect-square bg-zinc-950 border border-dashed border-white/5 rounded-2xl flex items-center justify-center opacity-10">
-                   <ImageIcon size={20} />
-                </div>
-              ))}
            </div>
         </section>
 
         <section className="space-y-4">
-          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-4">Način rada</label>
-          <div className="grid grid-cols-3 gap-2">
-            {['classic', 'mobile', 'both'].map((mode) => (
-              <button key={mode} onClick={() => setWorkMode(mode as WorkMode)} className={`p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all ${workMode === mode ? 'bg-[#D4AF37] border-[#D4AF37] text-black shadow-xl' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}>
-                <span className="text-[8px] font-black uppercase tracking-tighter">{mode}</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-3 ml-4">
+             <Lock size={12} className="text-[#D4AF37]" />
+             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Sigurnost i Postavke</p>
           </div>
+          <Card className="p-6 bg-zinc-950 border-white/5 space-y-4">
+            <button 
+              onClick={() => setIsSupportOpen(true)}
+              className="w-full py-4 border border-[#D4AF37]/20 bg-[#D4AF37]/5 rounded-2xl text-[9px] font-black text-[#D4AF37] uppercase tracking-widest hover:bg-[#D4AF37]/10 transition-all flex items-center justify-center gap-3"
+            >
+              <Sparkles size={14} /> {t.support}
+            </button>
+
+            {!isChangingPass ? (
+              <button 
+                onClick={() => setIsChangingPass(true)}
+                className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest hover:border-[#D4AF37]/30 transition-all flex items-center justify-center gap-3"
+              >
+                <Lock size={14} /> Promijeni lozinku
+              </button>
+            ) : (
+              <div className="space-y-4 animate-slide-up">
+                <Input 
+                  label={t.newPassword} 
+                  type="password" 
+                  value={newPass} 
+                  onChange={setNewPass} 
+                  placeholder="Unesite novu lozinku..."
+                />
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="h-12 text-[8px] rounded-xl" onClick={() => setIsChangingPass(false)}>{t.cancel}</Button>
+                  <Button variant="primary" loading={passLoading} className="h-12 text-[8px] rounded-xl" onClick={handleChangePassword}>{t.confirm}</Button>
+                </div>
+              </div>
+            )}
+
+            <button 
+              onClick={() => setIsLegalOpen(true)}
+              className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest hover:border-[#D4AF37]/30 transition-all flex items-center justify-center gap-3"
+            >
+              <FileText size={14} /> {t.legal}
+            </button>
+          </Card>
         </section>
 
-        <Button className="w-full h-18 text-xs font-black shadow-2xl" onClick={handleSave} loading={isLoading}>Spremi promjene</Button>
+        <section className="space-y-4 pt-4">
+          <div className="flex items-center gap-3 ml-4">
+             <AlertTriangle size={12} className="text-red-500" />
+             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t.dangerZone}</p>
+          </div>
+          <Card className="p-6 bg-red-500/5 border-red-500/10 space-y-4">
+             {isDeleting ? (
+               <div className="space-y-4 animate-lux-fade">
+                 <p className="text-[10px] text-red-500 font-black uppercase text-center">{t.confirmDeleteAccount}</p>
+                 <div className="flex gap-2">
+                    <button onClick={() => setIsDeleting(false)} className="flex-1 py-4 bg-zinc-900 rounded-xl text-[9px] font-black uppercase tracking-widest">{t.cancel}</button>
+                    <button onClick={handleDeleteAccount} className="flex-1 py-4 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl">{t.delete}</button>
+                 </div>
+               </div>
+             ) : (
+               <button 
+                  onClick={() => setIsDeleting(true)}
+                  className="w-full py-4 border border-red-500/20 rounded-2xl text-[9px] font-black text-red-500/60 uppercase tracking-widest hover:text-red-500 transition-all flex items-center justify-center gap-3"
+                >
+                  <Trash2 size={14} /> {t.deleteAccount}
+                </button>
+             )}
+          </Card>
+        </section>
+
+        <Button className="w-full h-18 text-xs font-black shadow-2xl" onClick={handleSave} loading={isLoading}>Spremi profil</Button>
       </div>
+
+      <LegalModal isOpen={isLegalOpen} onClose={() => setIsLegalOpen(false)} lang={lang} />
+      <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} lang={lang} />
     </div>
   );
 };

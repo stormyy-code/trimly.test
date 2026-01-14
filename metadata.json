@@ -1,9 +1,12 @@
 {
-  "name": "trimly",
-  "description": "A premium mobile-first barber booking application for Zagreb, featuring role-based dashboards for customers, barbers, and admins.",
+  "name": "Trimly Zagreb",
+  "short_name": "Trimly",
+  "description": "Premium network for barber bookings in Zagreb. Book your next haircut with the city's finest professionals.",
   "requestFramePermissions": [
     "geolocation",
     "camera",
     "microphone"
-  ]
+  ],
+  "theme_color": "#0A0A0A",
+  "background_color": "#000000"
 }

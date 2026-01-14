@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,8 +9,11 @@
     <meta name="theme-color" content="#0A0A0A">
     <title>Trimly | Zagreb Barber Network</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="https://i.ibb.co/C5fL3Pz/trimly-logo.png">
+    <link rel="apple-icon" href="https://i.ibb.co/C5fL3Pz/trimly-logo.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        window.process = window.process || { env: {} };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -44,31 +46,25 @@
         }
     </script>
     <style type="text/css">
+        :root {
+            --sat: env(safe-area-inset-top);
+            --sar: env(safe-area-inset-right);
+            --sab: env(safe-area-inset-bottom);
+            --sal: env(safe-area-inset-left);
+        }
         body, html {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            background-color: #000000;
-            color: #FFFFFF;
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            -webkit-tap-highlight-color: transparent;
+            height: 100dvh; width: 100%; margin: 0; padding: 0;
+            background-color: #000000; color: #FFFFFF;
+            font-family: 'Inter', sans-serif; overflow: hidden;
+            -webkit-tap-highlight-color: transparent; touch-action: manipulation;
         }
-        #root { 
-            height: 100%;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-        .premium-blur {
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-        }
-        .ios-shadow {
-            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
-        }
+        #root { height: 100dvh; width: 100%; display: flex; flex-direction: column; position: relative; }
+        .premium-blur { backdrop-filter: blur(25px) saturate(200%); -webkit-backdrop-filter: blur(25px) saturate(200%); }
+        .ios-shadow { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); }
         ::-webkit-scrollbar { display: none; }
         * { -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box; }
+        .pt-safe { padding-top: var(--sat); }
+        .pb-safe { padding-bottom: var(--sab); }
     </style>
 <script type="importmap">
 {
@@ -87,6 +83,6 @@
 </head>
 <body class="bg-black">
     <div id="root" class="w-full h-full bg-black"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

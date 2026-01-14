@@ -1,22 +1,23 @@
+
 import { supabase } from './supabase';
 import { User, BarberProfile, Service, Booking, Review } from '../types';
 
 /**
- * Production Database Layer
- * Handles all cloud mutations and synchronization.
- * LocalStorage is used only for caching (offline visibility).
+ * Production Database Engine
+ * Powered by Supabase PostgreSQL.
+ * LocalStorage acts only as a high-speed read cache.
  */
 export const db = {
-  // --- USERS & PROFILES ---
+  // --- USER PROFILES ---
   getUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase.from('profiles').select('*');
     if (error) return db.getUsersSync();
-    localStorage.setItem('bb_users_cache', JSON.stringify(data));
+    localStorage.setItem('trimly_users_cache', JSON.stringify(data));
     return (data as any) || [];
   },
 
   getUsersSync: (): User[] => {
-    const cached = localStorage.getItem('bb_users_cache');
+    const cached = localStorage.getItem('trimly_users_cache');
     return cached ? JSON.parse(cached) : [];
   },
 
@@ -46,33 +47,33 @@ export const db = {
   },
 
   deleteAccount: async (userId: string) => {
-    await supabase.from('profiles').delete().eq('id', userId);
-    await supabase.from('barbers').delete().eq('userId', userId);
-    return true;
+    const { error: pErr } = await supabase.from('profiles').delete().eq('id', userId);
+    const { error: bErr } = await supabase.from('barbers').delete().eq('userId', userId);
+    return !pErr && !bErr;
   },
 
   getActiveUser: (): User | null => {
-    const cached = localStorage.getItem('bb_active_user');
+    const cached = localStorage.getItem('trimly_active_user');
     return cached ? JSON.parse(cached) : null;
   },
 
   setActiveUser: (user: User | null) => {
-    if (user) localStorage.setItem('bb_active_user', JSON.stringify(user));
-    else localStorage.removeItem('bb_active_user');
+    if (user) localStorage.setItem('trimly_active_user', JSON.stringify(user));
+    else localStorage.removeItem('trimly_active_user');
   },
 
-  // --- BARBERS ---
+  // --- BARBER PROFILES ---
   getBarbers: async (): Promise<BarberProfile[]> => {
     const { data, error } = await supabase.from('barbers').select('*').order('createdAt', { ascending: false });
     if (!error && data) {
-      localStorage.setItem('bb_barbers_cache', JSON.stringify(data));
+      localStorage.setItem('trimly_barbers_cache', JSON.stringify(data));
       window.dispatchEvent(new Event('app-sync-complete'));
     }
     return (data as any) || db.getBarbersSync();
   },
 
   getBarbersSync: (): BarberProfile[] => {
-    const cached = localStorage.getItem('bb_barbers_cache');
+    const cached = localStorage.getItem('trimly_barbers_cache');
     return cached ? JSON.parse(cached) : [];
   },
 
@@ -95,12 +96,12 @@ export const db = {
     let query = supabase.from('services').select('*');
     if (barberId) query = query.eq('barberId', barberId);
     const { data, error } = await query;
-    if (!error && data) localStorage.setItem('bb_services_cache', JSON.stringify(data));
+    if (!error && data) localStorage.setItem('trimly_services_cache', JSON.stringify(data));
     return (data as any) || db.getServicesSync();
   },
   
   getServicesSync: (): Service[] => {
-    const cached = localStorage.getItem('bb_services_cache');
+    const cached = localStorage.getItem('trimly_services_cache');
     return cached ? JSON.parse(cached) : [];
   },
 
@@ -123,14 +124,14 @@ export const db = {
     }
     const { data, error } = await query.order('createdAt', { ascending: false });
     if (!error && data) {
-      localStorage.setItem('bb_bookings_cache', JSON.stringify(data));
+      localStorage.setItem('trimly_bookings_cache', JSON.stringify(data));
       window.dispatchEvent(new Event('app-sync-complete'));
     }
     return (data as any) || db.getBookingsSync();
   },
 
   getBookingsSync: (): Booking[] => {
-    const cached = localStorage.getItem('bb_bookings_cache');
+    const cached = localStorage.getItem('trimly_bookings_cache');
     return cached ? JSON.parse(cached) : [];
   },
 
@@ -154,12 +155,12 @@ export const db = {
     let query = supabase.from('reviews').select('*');
     if (barberId) query = query.eq('barberId', barberId);
     const { data, error } = await query;
-    if (!error && data) localStorage.setItem('bb_reviews_cache', JSON.stringify(data));
+    if (!error && data) localStorage.setItem('trimly_reviews_cache', JSON.stringify(data));
     return (data as any) || db.getReviewsSync();
   },
 
   getReviewsSync: (): Review[] => {
-    const cached = localStorage.getItem('bb_reviews_cache');
+    const cached = localStorage.getItem('trimly_reviews_cache');
     return cached ? JSON.parse(cached) : [];
   },
 

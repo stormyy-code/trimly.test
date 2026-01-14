@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { supabase } from '../../store/supabase';
 import { Booking } from '../../types';
 import { Card, Badge, Button } from '../../components/UI';
@@ -37,8 +37,19 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   useEffect(() => {
     const handleSync = () => setRefreshTrigger(prev => prev + 1);
     window.addEventListener('app-sync-complete', handleSync);
-    return () => window.removeEventListener('app-sync-complete', handleSync);
-  }, []);
+    // Real-time listener for barber's bookings
+    const channel = supabase
+      .channel('barber-bookings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barberId=eq.${barberId}` }, () => {
+        db.getBookings(barberId, 'barber');
+      })
+      .subscribe();
+    
+    return () => {
+      window.removeEventListener('app-sync-complete', handleSync);
+      supabase.removeChannel(channel);
+    };
+  }, [barberId]);
 
   const { pendingBookings, activeBookings, completedBookings, stats, barberShare } = useMemo(() => {
     const rawBookings = db.getBookingsSync().filter(b => b.barberId === barberId).sort((a, b) => 
@@ -49,9 +60,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
     const active = rawBookings.filter(b => b.status === 'accepted');
     const history = rawBookings.filter(b => b.status === 'completed' || b.status === 'rejected');
 
-    const now = new Date();
     const todayStr = new Date().toISOString().split('T')[0];
-    
     const completed = rawBookings.filter(b => b.status === 'completed');
     const velocity = {
       daily: completed.filter(b => b.date === todayStr).length,
@@ -67,19 +76,12 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
   const updateStatus = async (bookingId: string, status: Booking['status']) => {
     setIsUpdating(bookingId);
-    try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status })
-        .eq('id', bookingId);
-      
-      if (!error) {
-        db.getBookingsSync().map(b => b.id === bookingId ? { ...b, status } : b);
-        setRefreshTrigger(prev => prev + 1);
-      }
-    } finally {
-      setIsUpdating(null);
+    const success = await db.updateBookingStatus(bookingId, status);
+    if (success) {
+      await db.getBookings(barberId, 'barber');
+      setRefreshTrigger(prev => prev + 1);
     }
+    setIsUpdating(null);
   };
 
   const renderBookingCard = (booking: Booking) => (
@@ -162,7 +164,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
       <div className="flex bg-zinc-950 p-2 rounded-[2rem] border border-white/5 mx-1">
         {(['pending', 'active', 'history'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all relative ${activeTab === tab ? 'bg-white text-black shadow-2xl scale-100' : 'text-zinc-600 scale-95 opacity-60'}`}>
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[8px] font-black uppercase tracking widest rounded-2xl transition-all relative ${activeTab === tab ? 'bg-white text-black shadow-2xl scale-100' : 'text-zinc-600 scale-95 opacity-60'}`}>
             {tab === 'pending' ? 'Zahtjevi' : tab === 'active' ? 'Aktivno' : 'Povijest'} 
             {tab === 'pending' && pendingBookings.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shadow-xl border-2 border-black animate-bounce">{pendingBookings.length}</span>

@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { BarberProfile, WorkingDay, BreakTime } from '../../types';
 import { translations, Language } from '../../translations';
 import { Card, Button, Badge } from '../../components/UI';

@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../store/mockDatabase';
+import { db } from '../../store/database';
 import { StorageService } from '../../services/StorageService';
 import { Service } from '../../types';
 import { translations, Language } from '../../translations';
-import { Button, Input, Card } from '../../components/UI';
+import { Button, Input, Card, Toast } from '../../components/UI';
 import { Plus, Trash2, Camera, Loader2 } from 'lucide-react';
 
 interface BarberServicesProps {
@@ -21,21 +20,25 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [services, setServices] = useState<Service[]>([]);
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = translations[lang];
 
-  useEffect(() => {
+  const fetchServices = async () => {
     if (barberId) {
-      const allServices = db.getServicesSync();
-      setServices(allServices.filter(s => s.barberId === barberId));
+      const all = await db.getServices(barberId);
+      setServices(all);
     }
+  };
+
+  useEffect(() => {
+    fetchServices();
   }, [barberId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsUploading(true);
     const url = await StorageService.uploadPhoto(file, 'services');
     if (url) setImageUrl(url);
@@ -55,28 +58,30 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       imageUrl: imageUrl || 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=400'
     };
 
-    const allServices = db.getServicesSync();
-    const updated = [...allServices, newService];
-    await db.saveServices(updated);
-    setServices(updated.filter(s => s.barberId === barberId));
-    
-    setName('');
-    setPrice('');
-    setDuration('');
-    setDescription('');
-    setImageUrl('');
-    setIsAdding(false);
+    const success = await db.addService(newService);
+    if (success) {
+      setToast({ msg: t.done, type: 'success' });
+      fetchServices();
+      setName('');
+      setPrice('');
+      setDuration('');
+      setDescription('');
+      setImageUrl('');
+      setIsAdding(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    const all = db.getServicesSync();
-    const filtered = all.filter(s => s.id !== id);
-    await db.saveServices(filtered);
-    setServices(filtered.filter(s => s.barberId === barberId));
+    const success = await db.deleteService(id);
+    if (success) {
+      setToast({ msg: 'Usluga obrisana.', type: 'success' });
+      fetchServices();
+    }
   };
 
   return (
     <div className="space-y-8 animate-slide-up pb-12">
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 ios-shadow flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black text-white">{t.services}</h2>
@@ -117,7 +122,9 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       )}
 
       <div className="space-y-4">
-        {services.map(service => (
+        {services.length === 0 ? (
+          <div className="py-20 text-center opacity-10 text-[9px] font-black uppercase tracking-widest italic">{t.noData}</div>
+        ) : services.map(service => (
           <Card key={service.id} className="p-4 flex gap-4 items-center group bg-zinc-950/50 border-white/5">
             <img src={service.imageUrl} className="w-20 h-20 rounded-2xl object-cover grayscale brightness-75 group-hover:grayscale-0 transition-all" alt="" />
             <div className="flex-1">
@@ -130,6 +137,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       </div>
     </div>
   );
-};
+}
 
+// Fixed: Added missing default export
 export default BarberServices;
