@@ -38,51 +38,63 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   const completedCuts = bookings.filter(b => b.status === 'completed').length;
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const { data } = await supabase.from('profiles').select('avatar_url, full_name').eq('id', user.id).maybeSingle();
-      if (data) {
-        if (data.avatar_url) setProfilePic(data.avatar_url);
-        if (data.full_name) {
-          setFullName(data.full_name);
-          setTempName(data.full_name);
-        }
-      }
-    };
-    fetchProfile();
-  }, [user.id]);
+    setFullName(user.fullName || '');
+    setTempName(user.fullName || '');
+    if (user.avatarUrl) setProfilePic(user.avatarUrl);
+  }, [user]);
 
   const handleUpdateName = async () => {
-    if (!tempName.trim()) return;
-    setPassLoading(true);
-    const success = await db.updateProfileDetails(user.id, { full_name: tempName });
-    if (success) {
-      setFullName(tempName);
-      setToastMsg({ msg: t.done, type: 'success' });
+    const trimmedName = tempName.trim();
+    if (!trimmedName || trimmedName === fullName) {
       setIsEditingName(false);
-      if (onRoleUpdate) onRoleUpdate();
-    } else {
-      setToastMsg({ msg: 'Greška pri spremanju imena.', type: 'error' });
+      return;
     }
-    setPassLoading(false);
+
+    setPassLoading(true);
+    try {
+      const success = await db.updateProfileDetails(user.id, { fullName: trimmedName });
+      if (success) {
+        setFullName(trimmedName);
+        setToastMsg({ msg: t.done, type: 'success' });
+        setIsEditingName(false);
+      } else {
+        setToastMsg({ msg: 'Greška pri spremanju. Provjerite konzolu (F12) za detalje.', type: 'error' });
+      }
+    } catch (e) {
+      setToastMsg({ msg: 'Greška na mreži.', type: 'error' });
+    } finally {
+      setPassLoading(false);
+    }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files ? e.target.files[0] : null;
     if (!file) return;
+    
     setIsUploading(true);
     try {
-      const url = await StorageService.uploadPhoto(file, 'profiles');
+      const { url, error } = await StorageService.uploadPhoto(file, 'profiles');
+      
+      if (error) {
+        setToastMsg({ msg: `Greška: ${error}`, type: 'error' });
+        return;
+      }
+
       if (url) {
-        const success = await db.updateProfileDetails(user.id, { avatar_url: url });
+        const success = await db.updateProfileDetails(user.id, { avatarUrl: url });
         if (success) {
           setProfilePic(url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
+        } else {
+          setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu profila.', type: 'error' });
         }
-      } else {
-        setToastMsg({ msg: 'Greška pri uploadu slike.', type: 'error' });
       }
+    } catch (err: any) {
+      setToastMsg({ msg: 'Neočekivana greška pri uploadu.', type: 'error' });
     } finally {
       setIsUploading(false);
+      // Reset inputa kako bi se ista slika mogla ponovno odabrati ako zatreba
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -100,19 +112,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setIsChangingPass(false);
     } catch (err: any) {
       setToastMsg({ msg: err.message || 'Greška', type: 'error' });
-    } finally {
-      setPassLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    setPassLoading(true);
-    try {
-      await db.deleteAccount(user.id);
-      await supabase.auth.signOut();
-      onLogout();
-    } catch (e) {
-      setToastMsg({ msg: 'Greška pri brisanju.', type: 'error' });
     } finally {
       setPassLoading(false);
     }
@@ -158,7 +157,9 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
               />
               <div className="flex gap-2 w-full">
                 <button onClick={() => setIsEditingName(false)} className="flex-1 bg-zinc-800 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest italic">{t.cancel}</button>
-                <button onClick={handleUpdateName} className="flex-[2] bg-[#D4AF37] text-black py-3 rounded-xl font-black text-[9px] uppercase tracking-widest italic">{t.save}</button>
+                <button onClick={handleUpdateName} className="flex-[2] bg-[#D4AF37] text-black py-3 rounded-xl font-black text-[9px] uppercase tracking-widest italic">
+                  {passLoading ? <Loader2 className="animate-spin mx-auto" size={14} /> : t.save}
+                </button>
               </div>
             </div>
           ) : (
@@ -227,31 +228,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
           >
             <FileText size={14} /> {t.legal}
           </button>
-        </Card>
-      </section>
-
-      <section className="space-y-4 px-1 pt-4">
-        <div className="flex items-center gap-3 ml-4">
-           <AlertTriangle size={12} className="text-red-500" />
-           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t.dangerZone}</p>
-        </div>
-        <Card className="p-6 bg-red-500/5 border-red-500/10 space-y-4">
-           {isDeleting ? (
-             <div className="space-y-4 animate-lux-fade">
-               <p className="text-[10px] text-red-500 font-black uppercase text-center">{t.confirmDeleteAccount}</p>
-               <div className="flex gap-2">
-                  <button onClick={() => setIsDeleting(false)} className="flex-1 py-4 bg-zinc-900 rounded-xl text-[9px] font-black uppercase tracking-widest">{t.cancel}</button>
-                  <button onClick={handleDeleteAccount} className="flex-1 py-4 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl">{t.delete}</button>
-               </div>
-             </div>
-           ) : (
-             <button 
-                onClick={() => setIsDeleting(true)}
-                className="w-full py-4 border border-red-500/20 rounded-2xl text-[9px] font-black text-red-500/60 uppercase tracking-widest hover:text-red-500 transition-all flex items-center justify-center gap-3"
-              >
-                <Trash2 size={14} /> {t.deleteAccount}
-              </button>
-           )}
         </Card>
       </section>
 

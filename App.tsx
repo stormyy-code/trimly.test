@@ -41,19 +41,17 @@ const App: React.FC = () => {
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
     try {
-      const promises: Promise<any>[] = [db.getBarbers(), db.getReviews()];
+      db.getBarbers();
+      db.getReviews();
+      db.getServices();
+      db.getBookings(uId, uRole);
+      
       if (uRole === 'admin') {
-        promises.push(db.getBookings());
-        promises.push(db.getServices());
-        promises.push(db.getUsers());
-      } else {
-        promises.push(db.getServices());
-        promises.push(db.getBookings(uId, uRole));
+        db.getUsers();
       }
-      await Promise.allSettled(promises);
       window.dispatchEvent(new Event('app-sync-complete'));
     } catch (e) {
-      console.error("Sync error:", e);
+      console.warn("Sync error:", e);
     }
   }, []);
 
@@ -63,9 +61,9 @@ const App: React.FC = () => {
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
-        .single();
+        .maybeSingle();
       
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) console.warn("Profile fetch error:", error.message);
 
       let finalRole: UserRole = 'customer';
       if (profile && profile.role) {
@@ -74,37 +72,52 @@ const App: React.FC = () => {
         else if (rawRole === 'barber') finalRole = 'barber';
       }
       
-      const fullUser = { id: supabaseUser.id, email: supabaseUser.email || '', role: finalRole } as User;
+      const fullUser = { 
+        id: supabaseUser.id, 
+        email: supabaseUser.email || '', 
+        role: finalRole,
+        // Promjena ovdje: čitamo fullName/avatarUrl
+        fullName: profile?.fullName || profile?.full_name || '',
+        avatarUrl: profile?.avatarUrl || profile?.avatar_url || '',
+        banned: profile?.banned || false
+      } as User;
       
       if (prevRoleRef.current && prevRoleRef.current !== finalRole) {
         setActiveTab('home');
       }
       prevRoleRef.current = finalRole;
 
-      await syncAllData(fullUser.id, finalRole);
-
-      if (finalRole === 'barber') {
-        const barbers = await db.getBarbers();
-        const bProf = (barbers || []).find(b => b.userId === fullUser.id);
-        setBarberProfile(bProf || null);
-      } else {
-        setBarberProfile(null);
-      }
-
       setUser(fullUser);
       db.setActiveUser(fullUser);
       setDbStatus('connected');
       
-      return fullUser;
+      syncAllData(fullUser.id, finalRole);
+
+      if (finalRole === 'barber') {
+        db.getBarbers().then(barbers => {
+          const bProf = (barbers || []).find(b => b.userId === fullUser.id);
+          setBarberProfile(bProf || null);
+        });
+      }
     } catch (err: any) {
-      console.error("Auth hydration error:", err.message);
-      const fallbackUser = { id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' as UserRole };
-      setUser(fallbackUser);
-      return fallbackUser;
+      console.error("Auth handler error:", err);
+      setUser({ id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' as UserRole });
     } finally {
       setIsInitializing(false);
     }
   }, [syncAllData]);
+
+  useEffect(() => {
+    const handleProfileRefresh = () => {
+      const active = db.getActiveUser();
+      if (active) {
+        setUser(prev => prev ? { ...prev, ...active } : active);
+      }
+    };
+
+    window.addEventListener('user-profile-updated', handleProfileRefresh);
+    return () => window.removeEventListener('user-profile-updated', handleProfileRefresh);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -125,13 +138,15 @@ const App: React.FC = () => {
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user && mounted) {
-        await handleAuthUser(session.user);
-      } else if (event === 'SIGNED_OUT' && mounted) {
-        setUser(null);
-        setBarberProfile(null);
-        setIsInitializing(false);
-        localStorage.removeItem('trimly_active_user');
+      if (mounted) {
+        if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+          handleAuthUser(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setBarberProfile(null);
+          setIsInitializing(false);
+          localStorage.clear();
+        }
       }
     });
 
@@ -144,11 +159,9 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     setIsInitializing(true);
     await supabase.auth.signOut();
-    localStorage.clear();
     setUser(null);
     setBarberProfile(null);
     setActiveTab('home');
-    prevRoleRef.current = null;
     setIsInitializing(false);
   };
 
@@ -160,7 +173,7 @@ const App: React.FC = () => {
           <Loader2 className="animate-spin text-[#D4AF37] relative z-10" size={48} />
         </div>
         <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 animate-pulse text-center leading-loose">
-          Trimly Zagreb<br/>Network Hydration
+          Trimly Zagreb<br/>Secure Syncing
         </p>
       </div>
     );
@@ -179,7 +192,7 @@ const App: React.FC = () => {
         case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'bookings': return <CustomerBookings lang={lang} customerId={user.id} />;
-        case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} onRoleUpdate={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+        case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} onRoleUpdate={() => {}} />;
         default: return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
       }
     }
@@ -191,7 +204,7 @@ const App: React.FC = () => {
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'schedule': return <BarberAvailability lang={lang} barberId={barberProfile.id} />;
         case 'services': return <BarberServices lang={lang} barberId={barberProfile.id} />;
-        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => {}} />;
         default: return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
       }
     }

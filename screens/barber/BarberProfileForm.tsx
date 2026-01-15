@@ -69,24 +69,31 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    const url = await StorageService.uploadPhoto(file, 'profiles');
+    const { url, error } = await StorageService.uploadPhoto(file, 'profiles');
     if (url) {
       setPic(url);
       setToastMsg({ msg: 'Profilna slika učitana.', type: 'success' });
     } else {
-      setToastMsg({ msg: 'Upload nije uspio.', type: 'error' });
+      setToastMsg({ msg: error || 'Upload nije uspio.', type: 'error' });
     }
     setIsUploading(false);
   };
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (gallery.length >= 5) {
+      setToastMsg({ msg: 'Limit je 5 slika u galeriji.', type: 'error' });
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    const url = await StorageService.uploadPhoto(file, 'gallery');
+    const { url, error } = await StorageService.uploadPhoto(file, 'gallery');
     if (url) {
       setGallery(prev => [...prev, url]);
-      setToastMsg({ msg: 'Slika dodana u galeriju.', type: 'success' });
+      setToastMsg({ msg: `Slika dodana (${gallery.length + 1}/5).`, type: 'success' });
+    } else {
+      setToastMsg({ msg: error || 'Greška pri uploadu.', type: 'error' });
     }
     setIsUploading(false);
   };
@@ -98,36 +105,46 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     }
     
     setIsLoading(true);
-    const barbers = await db.getBarbers();
-    const existing = barbers.find(b => b.userId === userId);
-    
-    const profile: any = {
-      userId,
-      fullName,
-      profilePicture: pic,
-      neighborhood,
-      address: address || '',
-      zipCode: zipCode || '',
-      city: city || 'Zagreb',
-      bio: bio || '',
-      gallery: gallery || [],
-      workMode: workMode || 'classic',
-      approved: existing ? existing.approved : false,
-      createdAt: existing ? existing.createdAt : new Date().toISOString(),
-      workingHours: existing?.workingHours || [],
-      slotInterval: existing?.slotInterval || 45
-    };
+    try {
+      const barbers = await db.getBarbers();
+      const existing = barbers.find(b => b.userId === userId);
+      
+      const profile: any = {
+        userId,
+        fullName,
+        profilePicture: pic,
+        neighborhood,
+        address: address || '',
+        zipCode: zipCode || '',
+        city: city || 'Zagreb',
+        bio: bio || '',
+        gallery: gallery || [],
+        workMode: workMode || 'classic',
+        approved: existing ? existing.approved : false,
+        createdAt: existing ? existing.createdAt : new Date().toISOString(),
+        workingHours: existing?.workingHours || [],
+        slotInterval: existing?.slotInterval || 45
+      };
 
-    if (existing?.id) profile.id = existing.id;
-    
-    const result = await db.saveBarbers(profile);
-    setIsLoading(false);
-    
-    if (result.success) {
-      setToastMsg({ msg: t.done, type: 'success' });
-      setTimeout(onComplete, 1200);
-    } else {
-      setToastMsg({ msg: `Greška: ${result.error}`, type: 'error' });
+      if (existing?.id) profile.id = existing.id;
+      
+      const result = await db.saveBarbers(profile);
+      
+      if (result.success) {
+        setToastMsg({ msg: t.done, type: 'success' });
+        setTimeout(onComplete, 1200);
+      } else {
+        // Detaljna poruka o grešci ako stupci nedostaju
+        let msg = result.error;
+        if (msg.includes('column') || msg.includes('42703')) {
+          msg = "Bazi nedostaju polja (city/zipCode). Pokrenite SQL popravak.";
+        }
+        setToastMsg({ msg: `Greška: ${msg}`, type: 'error' });
+      }
+    } catch (err: any) {
+      setToastMsg({ msg: 'Kritična greška pri spremanju.', type: 'error' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -141,8 +158,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
              {isUploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-[#D4AF37]" /></div>}
           </div>
           <button 
+            disabled={isUploading}
             onClick={() => !isUploading && fileInputRef.current?.click()}
-            className="absolute -bottom-2 -right-2 w-11 h-11 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black shadow-xl active:scale-90 border-4 border-black"
+            className="absolute -bottom-2 -right-2 w-11 h-11 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black shadow-xl active:scale-90 border-4 border-black disabled:opacity-50"
           >
             <Camera size={20} />
           </button>
@@ -182,10 +200,14 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
 
         <section className="space-y-4">
            <div className="flex justify-between items-center px-4">
-              <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova</label>
+              <div className="flex flex-col">
+                <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova</label>
+                <span className="text-[7px] text-zinc-700 font-bold uppercase tracking-widest">Maksimalno 5 slika ({gallery.length}/5)</span>
+              </div>
               <button 
+                disabled={isUploading || gallery.length >= 5}
                 onClick={() => !isUploading && galleryInputRef.current?.click()} 
-                className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-2 px-3 py-2 bg-[#D4AF37]/5 rounded-xl border border-[#D4AF37]/10"
+                className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-2 px-3 py-2 bg-[#D4AF37]/5 rounded-xl border border-[#D4AF37]/10 disabled:opacity-30"
               >
                  {isUploading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Dodaj sliku
               </button>
@@ -204,6 +226,12 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                    </button>
                 </div>
               ))}
+              {gallery.length === 0 && (
+                <div className="col-span-3 py-10 border border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center text-zinc-800 gap-2">
+                  <ImageIcon size={24} />
+                  <span className="text-[8px] font-black uppercase tracking-widest">Galerija je prazna</span>
+                </div>
+              )}
            </div>
         </section>
 
