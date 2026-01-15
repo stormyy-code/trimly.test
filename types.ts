@@ -1,5 +1,4 @@
 
-
 export type UserRole = 'customer' | 'barber' | 'admin';
 export type WorkMode = 'classic' | 'mobile' | 'both';
 
@@ -12,7 +11,6 @@ export interface User {
   banned?: boolean;
 }
 
-// Fix: Added missing ZagrebQuarter interface required by constants.ts
 export interface ZagrebQuarter {
   name: string;
   lat: number;
@@ -37,6 +35,7 @@ export interface BarberProfile {
   userId: string;
   fullName: string;
   profilePicture: string;
+  phoneNumber?: string;
   neighborhood: string;
   address: string;
   zipCode?: string;

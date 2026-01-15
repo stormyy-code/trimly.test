@@ -7,7 +7,7 @@ import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast } from '../../components/UI';
-import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle, Navigation, X, ShieldCheck } from 'lucide-react';
+import { Camera, Plus, Trash2, Home, Building2, MapPin, Info, Loader2, Image as ImageIcon, Copy, CheckCircle2, Lock, FileText, Sparkles, AlertTriangle, Navigation, X, ShieldCheck, Phone } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 
@@ -24,13 +24,14 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [copied, setCopied] = useState(false);
   
   const [fullName, setFullName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
   const [address, setAddress] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [city, setCity] = useState('Zagreb');
   const [bio, setBio] = useState('');
   const [workMode, setWorkMode] = useState<WorkMode>('classic');
-  const [pic, setPic] = useState('https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
+  const [pic, setPic] = useState('');
   const [gallery, setGallery] = useState<string[]>([]);
 
   const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
@@ -46,11 +47,12 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const existing = barbers.find(b => b.userId === userId);
       if (existing) {
         setFullName(existing.fullName || '');
+        setPhoneNumber(existing.phoneNumber || '');
         setNeighborhood(existing.neighborhood || '');
         setAddress(existing.address || '');
         setBio(existing.bio || '');
         setWorkMode(existing.workMode || 'classic');
-        setPic(existing.profilePicture || 'https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
+        setPic(existing.profilePicture || '');
         setGallery(existing.gallery || []);
         if (existing.zipCode) setZipCode(existing.zipCode);
         if (existing.city) setCity(existing.city);
@@ -72,7 +74,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     const { url, error } = await StorageService.uploadPhoto(file, 'profiles');
     if (url) {
       setPic(url);
-      setToastMsg({ msg: 'Profilna slika učitana.', type: 'success' });
+      // Automatski sinkroniziraj s glavnim avatarom korisnika
+      await db.updateProfileDetails(userId, { avatarUrl: url });
+      setToastMsg({ msg: 'Profilna slika učitana i sinkronizirana.', type: 'success' });
     } else {
       setToastMsg({ msg: error || 'Upload nije uspio.', type: 'error' });
     }
@@ -112,7 +116,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const profile: any = {
         userId,
         fullName,
-        profilePicture: pic,
+        phoneNumber: phoneNumber || '',
+        profilePicture: pic || 'https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400',
         neighborhood,
         address: address || '',
         zipCode: zipCode || '',
@@ -134,12 +139,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         setToastMsg({ msg: t.done, type: 'success' });
         setTimeout(onComplete, 1200);
       } else {
-        // Detaljna poruka o grešci ako stupci nedostaju
-        let msg = result.error;
-        if (msg.includes('column') || msg.includes('42703')) {
-          msg = "Bazi nedostaju polja (city/zipCode). Pokrenite SQL popravak.";
-        }
-        setToastMsg({ msg: `Greška: ${msg}`, type: 'error' });
+        setToastMsg({ msg: `Greška: ${result.error}`, type: 'error' });
       }
     } catch (err: any) {
       setToastMsg({ msg: 'Kritična greška pri spremanju.', type: 'error' });
@@ -153,8 +153,12 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       {toastMsg && <Toast message={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
       <div className="premium-blur bg-white/5 border border-white/10 rounded-[2.5rem] p-8 text-center space-y-6">
         <div className="relative w-28 h-28 mx-auto group">
-          <div className={`w-full h-full rounded-[2.25rem] overflow-hidden border-4 border-white/5 shadow-2xl relative ${isUploading ? 'opacity-50' : ''}`}>
-             <img src={pic} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="Avatar" />
+          <div className={`w-full h-full rounded-[2.25rem] overflow-hidden border-4 border-white/5 shadow-2xl relative bg-zinc-900 ${isUploading ? 'opacity-50' : ''}`}>
+             {pic ? (
+               <img src={pic} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="Avatar" />
+             ) : (
+               <div className="w-full h-full flex items-center justify-center text-zinc-800"><ImageIcon size={40} /></div>
+             )}
              {isUploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-[#D4AF37]" /></div>}
           </div>
           <button 
@@ -181,6 +185,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
 
       <div className="space-y-8 px-6">
         <Input label="Puno Ime" value={fullName} onChange={setFullName} placeholder="npr. Marko Markić" />
+        <Input label="Broj Mobitela" value={phoneNumber} onChange={setPhoneNumber} placeholder="npr. 091 234 5678" />
         <Input label="Kvart" value={neighborhood} onChange={setNeighborhood} placeholder="npr. Trešnjevka" />
         <Input label="Ulica i kućni broj" value={address} onChange={setAddress} placeholder="npr. Ilica 10" />
         <div className="grid grid-cols-2 gap-4">

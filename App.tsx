@@ -186,8 +186,10 @@ const App: React.FC = () => {
         : <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser as any} onToggle={() => setActiveTab('register')} dbStatus={dbStatus} />;
     }
 
+    // Common Profile Detail logic for all roles
+    if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
+
     if (user.role === 'customer') {
-      if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
       switch (activeTab) {
         case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
@@ -213,7 +215,7 @@ const App: React.FC = () => {
       switch (activeTab) {
         case 'home': return <AdminDashboard lang={lang} onLogout={handleLogout} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'barbers': return <AdminBarbers lang={lang} />;
+        case 'barbers': return <AdminBarbers lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'approvals': return <AdminApprovals lang={lang} />;
         case 'settings': return (
           <div className="flex flex-col items-center justify-center pt-20 space-y-8">

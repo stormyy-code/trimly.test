@@ -185,7 +185,11 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
             <ArrowLeft size={22} className="text-white" />
           </button>
           <div className="flex gap-2">
-             <a href={`tel:+385910000000`} className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-all"><Phone size={20} className="text-black" /></a>
+             {barber.phoneNumber && (
+               <a href={`tel:${barber.phoneNumber}`} className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-all">
+                 <Phone size={20} className="text-black" />
+               </a>
+             )}
              <button className="w-12 h-12 bg-black/80 premium-blur border border-white/10 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-all"><Heart size={22} className="text-zinc-500" /></button>
           </div>
         </div>

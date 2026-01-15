@@ -9,9 +9,10 @@ import Logo from '../../components/Logo';
 
 interface AdminBarbersProps {
   lang: Language;
+  onSelectBarber: (id: string) => void;
 }
 
-const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang }) => {
+const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState<{ bId: string, uId: string, name: string } | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -34,7 +35,8 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang }) => {
     return db.getBarbersSync();
   }, [refreshTrigger]);
 
-  const toggleFeatured = async (id: string) => {
+  const toggleFeatured = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     const all = db.getBarbersSync();
     const targetBarber = all.find(b => b.id === id);
     if (targetBarber) {
@@ -44,6 +46,11 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang }) => {
         setToast({ msg: t.done, type: 'success' });
       }
     }
+  };
+
+  const handleDeleteClick = (barber: BarberProfile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmDelete({ bId: barber.id, uId: barber.userId, name: barber.fullName });
   };
 
   const handleFinalRemoval = async () => {
@@ -122,7 +129,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang }) => {
             </div>
           ) : (
             activeBarbers.map(barber => (
-              <Card key={barber.id} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/[0.05] bg-zinc-950'}`}>
+              <Card key={barber.id} onClick={() => onSelectBarber(barber.id)} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] group border ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/[0.05] bg-zinc-950'}`}>
                 <div className="relative shrink-0">
                   <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden border border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all">
                     <SafeImage src={barber.profilePicture} className="w-full h-full object-cover" alt={barber.fullName} />
@@ -143,10 +150,10 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang }) => {
                 </div>
 
                 <div className="flex gap-2 shrink-0 items-center">
-                  <button onClick={() => toggleFeatured(barber.id)} className={`w-11 h-11 rounded-2xl transition-all flex items-center justify-center border ${barber.featured ? 'bg-[#D4AF37] border-[#D4AF37] text-black' : 'bg-white/5 border-white/5 text-zinc-600'}`}>
+                  <button onClick={(e) => toggleFeatured(barber.id, e)} className={`w-11 h-11 rounded-2xl transition-all flex items-center justify-center border ${barber.featured ? 'bg-[#D4AF37] border-[#D4AF37] text-black' : 'bg-white/5 border-white/5 text-zinc-600'}`}>
                     <Star size={18} fill={barber.featured ? 'currentColor' : 'none'} />
                   </button>
-                  <button onClick={() => setConfirmDelete({ bId: barber.id, uId: barber.userId, name: barber.fullName })} className="w-11 h-11 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 flex items-center justify-center active:scale-90">
+                  <button onClick={(e) => handleDeleteClick(barber, e)} className="w-11 h-11 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 flex items-center justify-center active:scale-90">
                     <Trash2 size={18} />
                   </button>
                 </div>

@@ -5,7 +5,7 @@ import { StorageService } from '../../services/StorageService';
 import { User } from '../../types';
 import { Card, Button, Toast, Input } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, Trash2, AlertTriangle, Scissors } from 'lucide-react';
+import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, Trash2, AlertTriangle, Scissors, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../store/supabase';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
@@ -29,13 +29,9 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = translations[lang];
-  
-  const bookings = db.getBookingsSync().filter(b => b.customerId === user.id);
-  const completedCuts = bookings.filter(b => b.status === 'completed').length;
 
   useEffect(() => {
     setFullName(user.fullName || '');
@@ -58,7 +54,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         setToastMsg({ msg: t.done, type: 'success' });
         setIsEditingName(false);
       } else {
-        setToastMsg({ msg: 'Greška pri spremanju. Provjerite konzolu (F12) za detalje.', type: 'error' });
+        setToastMsg({ msg: 'Greška pri spremanju.', type: 'error' });
       }
     } catch (e) {
       setToastMsg({ msg: 'Greška na mreži.', type: 'error' });
@@ -86,14 +82,13 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
           setProfilePic(url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
         } else {
-          setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu profila.', type: 'error' });
+          setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu.', type: 'error' });
         }
       }
     } catch (err: any) {
       setToastMsg({ msg: 'Neočekivana greška pri uploadu.', type: 'error' });
     } finally {
       setIsUploading(false);
-      // Reset inputa kako bi se ista slika mogla ponovno odabrati ako zatreba
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -174,16 +169,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
             </div>
           )}
         </div>
-      </div>
-
-      <div className="px-1">
-        <Card className="p-8 bg-zinc-950 border-white/5 flex flex-col items-center text-center gap-4 relative overflow-hidden shadow-2xl">
-          <div className="absolute top-0 right-0 p-4 opacity-5">
-             <Scissors size={48} className="text-white" />
-          </div>
-          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">Ukupno šišanja u mreži</p>
-          <p className="text-5xl font-black text-white italic tracking-tighter leading-none">{completedCuts}</p>
-        </Card>
       </div>
 
       <section className="space-y-4 px-1">
