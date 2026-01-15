@@ -14,7 +14,6 @@ interface AdminBarbersProps {
 
 const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => {
   const [confirmDelete, setConfirmDelete] = useState<{ bId: string, uId: string, name: string } | null>(null);
-  // Inicijaliziraj iz cache-a odmah
   const [allUsers, setAllUsers] = useState<User[]>(db.getUsersSync());
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -50,7 +49,6 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
   const activeBarbers = useMemo(() => {
     return rawBarbers.filter(barber => {
       const u = allUsers.find(u => u.id === barber.userId);
-      // Samo ako je korisnik pronađen i NIJE banned
       return u && u.banned !== true && barber.approved === true;
     });
   }, [allUsers, rawBarbers]);
@@ -111,21 +109,21 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 ios-shadow flex flex-col items-center gap-4">
-        <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center text-white border border-white/10 overflow-hidden p-2">
+        <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center text-white border border-white/10 overflow-hidden p-2 shrink-0">
            <Logo className="w-full h-full" />
         </div>
-        <div className="text-center w-full">
-          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-1 w-full text-center">{t.registryControl}</p>
-          <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter w-full text-center">ČLANOVI MREŽE</h2>
+        <div className="text-center w-full min-w-0">
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-1 truncate">{t.registryControl}</p>
+          <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter truncate">ČLANOVI MREŽE</h2>
         </div>
       </div>
 
       <section className="space-y-6">
         <div className="flex justify-between items-center px-1">
-          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.4em] flex items-center gap-3">
-            <ShieldCheck size={16} className="text-emerald-500" /> AKTIVNI BARBERI
+          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.4em] flex items-center gap-3 truncate">
+            <ShieldCheck size={16} className="text-emerald-500 shrink-0" /> AKTIVNI BARBERI
           </h3>
-          <button onClick={fetchData} className="text-zinc-500">
+          <button onClick={fetchData} className="text-zinc-500 shrink-0">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -134,7 +132,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
           {activeBarbers.length === 0 ? (
             <div className="py-20 text-center opacity-30 w-full text-[10px] font-black uppercase tracking-widest italic">Nema aktivnih barbera</div>
           ) : activeBarbers.map(barber => (
-            <Card key={barber.id} onClick={() => onSelectBarber(barber.id)} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] border ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/5 bg-zinc-950'}`}>
+            <Card key={barber.id} onClick={() => onSelectBarber(barber.id)} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] border min-w-0 ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/5 bg-zinc-950'}`}>
               <div className="relative shrink-0">
                 <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden border border-white/10">
                   <SafeImage src={barber.profilePicture} className="w-full h-full object-cover" />
@@ -143,11 +141,11 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-black text-base text-white tracking-tight uppercase italic truncate leading-none">{barber.fullName}</h3>
-                <div className="flex items-center gap-2 text-[8px] text-zinc-600 font-black uppercase tracking-widest mt-2">
-                  <MapPin size={10} className="text-[#D4AF37]" /> {barber.neighborhood}
+                <div className="flex items-center gap-2 text-[8px] text-zinc-600 font-black uppercase tracking-widest mt-2 truncate">
+                  <MapPin size={10} className="text-[#D4AF37] shrink-0" /> {barber.neighborhood}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <button onClick={(e) => toggleFeatured(barber.id, e)} className={`w-11 h-11 rounded-2xl flex items-center justify-center border ${barber.featured ? 'bg-[#D4AF37] border-[#D4AF37] text-black' : 'bg-white/5 border-white/5 text-zinc-600'}`}>
                   <Star size={18} fill={barber.featured ? 'currentColor' : 'none'} />
                 </button>
@@ -161,20 +159,20 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
       </section>
 
       <section className="space-y-6">
-        <h3 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.4em] flex items-center gap-3 px-1">
-          <ShieldAlert size={16} /> ODUZETE LICENCE
+        <h3 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.4em] flex items-center gap-3 px-1 truncate">
+          <ShieldAlert size={16} className="shrink-0" /> ODUZETE LICENCE
         </h3>
         <div className="space-y-4 px-1">
           {bannedBarbers.map(({ user, profile }) => (
-            <Card key={user.id} className="p-5 flex items-center gap-5 rounded-[2.25rem] border-red-500/10 bg-red-950/5 opacity-80 grayscale">
-              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-red-500/10">
+            <Card key={user.id} className="p-5 flex items-center gap-5 rounded-[2.25rem] border-red-500/10 bg-red-950/5 opacity-80 grayscale min-w-0">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-red-500/10 shrink-0">
                 <SafeImage src={profile?.profilePicture || ''} className="w-full h-full object-cover opacity-40" />
               </div>
-              <div className="flex-1">
-                <h3 className="font-black text-xs text-zinc-400 uppercase italic line-through">{profile?.fullName || user.email}</h3>
-                <Badge variant="error" className="mt-1">Suspended</Badge>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-black text-xs text-zinc-400 uppercase italic line-through truncate">{profile?.fullName || user.email}</h3>
+                <Badge variant="error" className="mt-1 truncate">Suspended</Badge>
               </div>
-              <button onClick={() => handleUnban(user.id)} className="w-11 h-11 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20 flex items-center justify-center">
+              <button onClick={() => handleUnban(user.id)} className="w-11 h-11 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20 flex items-center justify-center shrink-0">
                 <RefreshCw size={18} className={actionLoading ? 'animate-spin' : ''} />
               </button>
             </Card>
@@ -191,7 +189,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-loose">Oduzimanje licence za {confirmDelete.name}.</p>
             <div className="flex flex-col w-full gap-3">
               <Button variant="danger" className="h-16 w-full" onClick={handleFinalRemoval} loading={actionLoading}>Da, Oduzmi Licencu</Button>
-              <Button variant="secondary" className="h-16 w-full bg-transparent border-white/5" onClick={() => !actionLoading && setConfirmDelete(null)}>Odustani</Button>
+              <button className="h-16 w-full text-zinc-500 text-[10px] font-black uppercase tracking-widest" onClick={() => !actionLoading && setConfirmDelete(null)}>Odustani</button>
             </div>
           </Card>
         </div>

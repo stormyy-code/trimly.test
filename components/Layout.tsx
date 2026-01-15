@@ -85,17 +85,17 @@ const Layout: React.FC<LayoutProps> = ({ children, role, activeTab, onTabChange,
   return (
     <div className="flex flex-col h-full w-full bg-black relative overflow-hidden">
       {!hideShell && (
-        <header className="shrink-0 z-50 bg-black/80 premium-blur border-b border-white/5 px-6 py-5 flex justify-between items-center animate-lux-fade pt-safe">
-          <div className="flex flex-col">
-            <h1 className="text-sm font-black text-white tracking-widest uppercase italic leading-none">{title}</h1>
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : 'bg-emerald-400'}`}></div>
-              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest leading-none">
+        <header className="shrink-0 z-50 bg-black/80 premium-blur border-b border-white/5 px-6 py-5 flex justify-between items-center animate-lux-fade pt-safe gap-4">
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-sm font-black text-white tracking-widest uppercase italic leading-none truncate">{title}</h1>
+            <div className="flex items-center gap-1.5 mt-1.5 min-w-0">
+              <div className={`shrink-0 w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : 'bg-emerald-400'}`}></div>
+              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest leading-none truncate">
                 {isSyncing ? 'Sinkronizacija...' : `${lastSynced}`}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
             <button 
               onClick={() => window.dispatchEvent(new Event('app-sync-start'))}
               className={`w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center text-zinc-400 transition-all active:scale-90 ${isSyncing ? 'animate-spin text-[#D4AF37]' : ''}`}

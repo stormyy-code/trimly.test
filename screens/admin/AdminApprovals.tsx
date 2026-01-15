@@ -111,12 +111,12 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
                 </div>
               )}
               
-              <div className="flex gap-8">
-                <div className="w-24 h-24 rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl transition-all duration-700">
+              <div className="flex gap-8 items-start">
+                <div className="shrink-0 w-24 h-24 rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl transition-all duration-700">
                    <img src={barber.profilePicture} className="w-full h-full object-cover" alt="" />
                 </div>
-                <div className="flex-1 py-1 space-y-4">
-                  <h3 className="font-black text-2xl text-white tracking-tighter italic uppercase leading-none">{barber.fullName}</h3>
+                <div className="flex-1 py-1 space-y-4 min-w-0">
+                  <h3 className="font-black text-2xl text-white tracking-tighter italic uppercase leading-none truncate">{barber.fullName}</h3>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="neutral" className="bg-white/5">{barber.neighborhood}</Badge>
                     <Badge variant="gold" className="text-[7px]">{barber.workMode}</Badge>
@@ -125,11 +125,11 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
               </div>
 
               <div className="space-y-4 p-6 bg-black/40 rounded-3xl border border-white/5">
-                <div className="flex items-center gap-3 text-zinc-500">
-                   <Mail size={14} className="text-[#D4AF37]" />
-                   <span className="text-[10px] font-bold lowercase tracking-normal">{barber.userId}</span>
+                <div className="flex items-center gap-3 text-zinc-500 min-w-0">
+                   <Mail size={14} className="text-[#D4AF37] shrink-0" />
+                   <span className="text-[10px] font-bold lowercase tracking-normal break-all">{barber.userId}</span>
                 </div>
-                <p className="text-xs text-zinc-400 font-medium leading-relaxed italic border-l-2 border-[#D4AF37]/40 pl-4">
+                <p className="text-xs text-zinc-400 font-medium leading-relaxed italic border-l-2 border-[#D4AF37]/40 pl-4 break-words">
                   "{barber.bio || 'Barber nije dostavio biografiju.'}"
                 </p>
               </div>
@@ -139,14 +139,14 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
                   className="flex-1 h-16 rounded-2xl border border-zinc-800 text-[10px] font-black uppercase tracking-widest text-zinc-500" 
                   onClick={() => handleAction(barber, false)}
                 >
-                  <X size={18} className="inline mr-2" /> ODBIJ
+                  <X size={18} className="inline mr-2 shrink-0" /> ODBIJ
                 </button>
                 <Button 
                   variant="primary" 
                   className="flex-[2] h-16 rounded-2xl shadow-[0_15px_40px_rgba(212,175,55,0.1)]" 
                   onClick={() => handleAction(barber, true)}
                 >
-                  <Check size={18} className="inline mr-2" /> ODOBRI PRISTUP
+                  <Check size={18} className="inline mr-2 shrink-0" /> ODOBRI
                 </Button>
               </div>
             </Card>

@@ -6,6 +6,7 @@ import { User, BarberProfile, UserRole } from './types';
 import { Language, translations } from './translations';
 import LoginScreen from './screens/auth/LoginScreen';
 import RegisterScreen from './screens/auth/RegisterScreen';
+import ChangePasswordScreen from './screens/auth/ChangePasswordScreen';
 import Layout from './components/Layout';
 import CustomerHome from './screens/customer/CustomerHome';
 import BarberProfileDetail from './screens/customer/BarberProfileDetail';
@@ -35,13 +36,13 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [lang, setLang] = useState<Language>('hr'); 
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   
   const t = translations[lang];
   const prevRoleRef = useRef<UserRole | null>(null);
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
     try {
-      // Svi trebaju profile za provjeru licenci na ljestvici/home
       await db.getUsers(); 
       await db.getBarbers();
       await db.getReviews();
@@ -120,11 +121,23 @@ const App: React.FC = () => {
   useEffect(() => {
     let mounted = true;
 
+    // Prva provjera: Ako URL sadrži recovery token
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      setIsRecoveringPassword(true);
+    }
+
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && mounted) {
-          await handleAuthUser(session.user);
+          // Ako smo u recovery modu, nemoj automatski povlačiti profil kao logged-in, 
+          // jer recovery session ima ograničena prava dok se lozinka ne promijeni.
+          if (!isRecoveringPassword) {
+            await handleAuthUser(session.user);
+          } else {
+            setIsInitializing(false);
+          }
         } else if (mounted) {
           setIsInitializing(false);
         }
@@ -136,27 +149,31 @@ const App: React.FC = () => {
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (mounted) {
-        if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+      if (!mounted) return;
+
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveringPassword(true);
+        setIsInitializing(false);
+      } else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        // Ako smo usred recovery-ja, USER_UPDATED će se desiti nakon promjene lozinke
+        if (!isRecoveringPassword) {
           handleAuthUser(session.user);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setBarberProfile(null);
-          setIsInitializing(false);
-          localStorage.clear();
         }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setBarberProfile(null);
+        setIsRecoveringPassword(false);
+        setIsInitializing(false);
+        localStorage.clear();
       }
     });
 
-    // REALTIME: Prati promjene licenci globalno
     const profileChannel = supabase
       .channel('public-profiles')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
         if (payload.new) {
           const { id, banned } = payload.new;
-          // Emitiraj event za sinkronizaciju tabova
           window.dispatchEvent(new CustomEvent('users-registry-updated', { detail: { userId: id, banned } }));
-          // Ako je trenutni korisnik dobio ban, izlogiraj ga ili obavijesti
           if (id === user?.id && banned === true) {
             setToast({ message: translations[lang].suspendedError, type: 'error' });
             setTimeout(handleLogout, 2000);
@@ -170,15 +187,18 @@ const App: React.FC = () => {
       subscription.unsubscribe();
       supabase.removeChannel(profileChannel);
     };
-  }, [handleAuthUser, user?.id, lang]);
+  }, [handleAuthUser, user?.id, lang, isRecoveringPassword]);
 
   const handleLogout = async () => {
     setIsInitializing(true);
     await supabase.auth.signOut();
     setUser(null);
     setBarberProfile(null);
+    setIsRecoveringPassword(false);
     setActiveTab('home');
     setIsInitializing(false);
+    // Očisti hash iz URL-a
+    window.location.hash = '';
   };
 
   if (isInitializing) {
@@ -192,6 +212,20 @@ const App: React.FC = () => {
           Trimly Zagreb<br/>Secure Syncing
         </p>
       </div>
+    );
+  }
+
+  // Ako detektiramo recovery mod iz URL-a ili eventa
+  if (isRecoveringPassword) {
+    return (
+      <ChangePasswordScreen 
+        lang={lang} 
+        onComplete={() => {
+          setIsRecoveringPassword(false);
+          setToast({ message: t.passwordUpdated, type: 'success' });
+          handleLogout(); // Odjava nakon uspješne promjene
+        }} 
+      />
     );
   }
 
