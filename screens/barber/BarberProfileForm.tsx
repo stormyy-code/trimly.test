@@ -155,7 +155,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         <div className="relative w-28 h-28 mx-auto group">
           <div className={`w-full h-full rounded-[2.25rem] overflow-hidden border-4 border-white/5 shadow-2xl relative bg-zinc-900 ${isUploading ? 'opacity-50' : ''}`}>
              {pic ? (
-               <img src={pic} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" alt="Avatar" />
+               <img src={pic} className="w-full h-full object-cover transition-all duration-700" alt="Avatar" />
              ) : (
                <div className="w-full h-full flex items-center justify-center text-zinc-800"><ImageIcon size={40} /></div>
              )}
@@ -222,7 +222,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
            <div className="grid grid-cols-3 gap-3">
               {gallery.map((img, i) => (
                 <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-white/5 bg-zinc-900 group">
-                   <img src={img} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                   <img src={img} className="w-full h-full object-cover transition-all duration-500" />
                    <button 
                     onClick={() => setGallery(prev => prev.filter((_, idx) => idx !== i))} 
                     className="absolute top-1.5 right-1.5 w-7 h-7 bg-red-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl"

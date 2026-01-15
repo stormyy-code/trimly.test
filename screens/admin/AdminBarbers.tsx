@@ -131,7 +131,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
             activeBarbers.map(barber => (
               <Card key={barber.id} onClick={() => onSelectBarber(barber.id)} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] group border ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/[0.05] bg-zinc-950'}`}>
                 <div className="relative shrink-0">
-                  <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden border border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all">
+                  <div className="w-16 h-16 rounded-[1.25rem] overflow-hidden border border-white/10 shadow-2xl transition-all">
                     <SafeImage src={barber.profilePicture} className="w-full h-full object-cover" alt={barber.fullName} />
                   </div>
                   {barber.weeklyWinner && (

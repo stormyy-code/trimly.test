@@ -112,7 +112,7 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
               )}
               
               <div className="flex gap-8">
-                <div className="w-24 h-24 rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700">
+                <div className="w-24 h-24 rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl transition-all duration-700">
                    <img src={barber.profilePicture} className="w-full h-full object-cover" alt="" />
                 </div>
                 <div className="flex-1 py-1 space-y-4">

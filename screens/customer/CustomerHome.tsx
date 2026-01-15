@@ -149,7 +149,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
               {featuredBarbers.map(barber => (
                 <div key={barber.id} onClick={() => onSelectBarber(barber.id)} className="shrink-0 w-44 relative active:scale-95 transition-all">
                   <div className="aspect-[3/4] rounded-[2.5rem] overflow-hidden border border-[#D4AF37]/30 shadow-2xl relative">
-                    <SafeImage src={barber.profilePicture} className="w-full h-full object-cover grayscale brightness-75 hover:grayscale-0 transition-all duration-700" />
+                    <SafeImage src={barber.profilePicture} className="w-full h-full object-cover transition-all duration-700" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                     <div className="absolute bottom-6 left-6 right-6">
                       <h4 className="text-white font-black text-sm italic uppercase tracking-tighter truncate">{barber.fullName}</h4>
@@ -168,7 +168,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
           {filteredBarbers.map((b) => (
             <div key={b.id} className="absolute" style={{ top: `${Math.random() * 70 + 15}%`, left: `${Math.random() * 70 + 15}%` }}>
               <button onClick={() => onSelectBarber(b.id)} className="p-1.5 rounded-full ring-2 ring-[#C5A059]/30 bg-black hover:scale-110 transition-all shadow-2xl">
-                <SafeImage src={b.profilePicture} className="w-12 h-12 rounded-full object-cover grayscale border-2 border-black" />
+                <SafeImage src={b.profilePicture} className="w-12 h-12 rounded-full object-cover border-2 border-black" />
               </button>
             </div>
           ))}
@@ -184,7 +184,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
           {filteredBarbers.map(barber => (
             <Card key={barber.id} className={`flex gap-5 p-5 bg-[#0a0a0a] active:bg-zinc-950 transition-all rounded-[2.25rem] group border ${barber.weeklyWinner ? 'border-[#D4AF37]/50 shadow-[0_15px_50px_rgba(212,175,55,0.1)]' : 'border-white/5'}`} onClick={() => onSelectBarber(barber.id)}>
               <div className="relative shrink-0">
-                <SafeImage src={barber.profilePicture} className="w-20 h-20 rounded-2xl object-cover grayscale brightness-90 group-hover:grayscale-0 transition-all duration-500 border border-white/5" />
+                <SafeImage src={barber.profilePicture} className="w-20 h-20 rounded-2xl object-cover transition-all duration-500 border border-white/5" />
                 {barber.weeklyWinner && <div className="absolute -top-1.5 -right-1.5 bg-[#D4AF37] p-1.5 rounded-lg border-2 border-black shadow-xl z-10"><Trophy size={10} className="text-black" /></div>}
               </div>
               <div className="flex-1 py-1 min-w-0 flex flex-col justify-between">

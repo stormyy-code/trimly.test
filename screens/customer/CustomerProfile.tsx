@@ -5,7 +5,7 @@ import { StorageService } from '../../services/StorageService';
 import { User } from '../../types';
 import { Card, Button, Toast, Input } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, Trash2, AlertTriangle, Scissors, Image as ImageIcon } from 'lucide-react';
+import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, LogOut } from 'lucide-react';
 import { supabase } from '../../store/supabase';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
@@ -69,17 +69,17 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
     
     setIsUploading(true);
     try {
-      const { url, error } = await StorageService.uploadPhoto(file, 'profiles');
+      const result = await StorageService.uploadPhoto(file, 'profiles');
       
-      if (error) {
-        setToastMsg({ msg: `Greška: ${error}`, type: 'error' });
+      if (result.error) {
+        setToastMsg({ msg: `Greška: ${result.error}`, type: 'error' });
         return;
       }
 
-      if (url) {
-        const success = await db.updateProfileDetails(user.id, { avatarUrl: url });
+      if (result.url) {
+        const success = await db.updateProfileDetails(user.id, { avatarUrl: result.url });
         if (success) {
-          setProfilePic(url);
+          setProfilePic(result.url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
         } else {
           setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu.', type: 'error' });
@@ -113,14 +113,14 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   };
 
   return (
-    <div className="space-y-8 animate-lux-fade pb-32 overflow-x-hidden">
+    <div className="space-y-12 animate-lux-fade pb-32">
       {toastMsg && <Toast message={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
       
-      <div className="flex flex-col items-center pt-8 pb-4">
-        <div className="relative mb-6">
-          <div className="w-32 h-32 bg-zinc-900 rounded-[3.5rem] border border-white/10 flex items-center justify-center text-zinc-600 shadow-2xl relative z-10 overflow-hidden">
+      <div className="flex flex-col items-center pt-8 pb-4 gap-8">
+        <div className="relative group">
+          <div className="w-32 h-32 bg-zinc-900 rounded-[2.5rem] border border-white/10 flex items-center justify-center text-zinc-600 shadow-2xl relative z-10 overflow-hidden">
              {profilePic ? (
-               <img src={profilePic} className="w-full h-full object-cover grayscale" alt="Profile" />
+               <img src={profilePic} className="w-full h-full object-cover" alt="Profile" />
              ) : (
                <UserIcon size={48} className="text-zinc-800" />
              )}
@@ -158,7 +158,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center text-center">
               <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setIsEditingName(true)}>
                 <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase leading-none">
                   {fullName || user.email.split('@')[0]}
@@ -216,9 +216,9 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         </Card>
       </section>
 
-      <div className="pt-6">
+      <div className="pt-6 px-1">
         <Button variant="danger" className="w-full h-20 text-[11px] font-black tracking-widest" onClick={onLogout}>
-          {lang === 'hr' ? 'ODJAVI SE IZ MREŽE' : 'LOGOUT NETWORK'}
+          <LogOut size={16} className="mr-3" /> {lang === 'hr' ? 'ODJAVI SE IZ MREŽE' : 'LOGOUT NETWORK'}
         </Button>
       </div>
 

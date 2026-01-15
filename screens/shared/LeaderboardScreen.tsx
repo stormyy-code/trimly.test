@@ -99,7 +99,7 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
 
               <div className="relative shrink-0">
                 <div className="w-20 h-20 rounded-[2rem] overflow-hidden border-2 border-white/10 shadow-2xl">
-                   <img src={barber.profilePicture} className="w-full h-full object-cover grayscale brightness-90" alt="" />
+                   <img src={barber.profilePicture} className="w-full h-full object-cover brightness-90" alt="" />
                 </div>
                 {isWinner && (
                   <div className="absolute -top-2 -right-2 bg-[#D4AF37] p-1.5 rounded-lg border-2 border-black shadow-2xl z-10">

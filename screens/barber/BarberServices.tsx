@@ -43,12 +43,12 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
     if (!file) return;
     
     setIsUploading(true);
-    const { url, error } = await StorageService.uploadPhoto(file, 'services');
-    if (url) {
-      setImageUrl(url);
+    const result = await StorageService.uploadPhoto(file, 'services');
+    if (result.url) {
+      setImageUrl(result.url);
       setToast({ msg: 'Slika usluge učitana.', type: 'success' });
     } else {
-      setToast({ msg: error || 'Greška pri uploadu slike.', type: 'error' });
+      setToast({ msg: result.error || 'Greška pri uploadu slike.', type: 'error' });
     }
     setIsUploading(false);
   };
@@ -97,11 +97,12 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
 
   const SafeImage = ({ src, className }: { src: string, className: string }) => {
     const [err, setErr] = useState(false);
+    const fallback = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=400";
     return (
       <img 
-        src={err || !src ? "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=400" : src} 
+        src={err || !src ? fallback : src} 
         onError={() => setErr(true)} 
-        className={className} 
+        className={`${className} object-cover w-full h-full`} 
         alt="" 
       />
     );
@@ -129,7 +130,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
             >
               {imageUrl ? (
                 <>
-                  <img src={imageUrl} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" alt="" />
+                  <SafeImage src={imageUrl} className="transition-all" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                      <Camera size={32} className="text-white" />
                   </div>
@@ -171,8 +172,8 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
           </div>
         ) : services.map(service => (
           <Card key={service.id} className="p-5 flex gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2.25rem]">
-            <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0">
-               <SafeImage src={service.imageUrl || ''} className="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 transition-all duration-500" />
+            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+               <SafeImage src={service.imageUrl || ''} className="group-hover:grayscale-0 transition-all duration-500" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-lg font-black text-white italic uppercase tracking-tighter truncate leading-none">{service.name}</h3>
