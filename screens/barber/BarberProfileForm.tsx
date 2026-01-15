@@ -33,10 +33,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [pic, setPic] = useState('https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
   const [gallery, setGallery] = useState<string[]>([]);
 
-  const [isChangingPass, setIsChangingPass] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [newPass, setNewPass] = useState('');
-  const [passLoading, setPassLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
@@ -56,8 +52,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         setWorkMode(existing.workMode || 'classic');
         setPic(existing.profilePicture || 'https://images.unsplash.com/photo-1599351431247-f10b21ce53e2?w=400');
         setGallery(existing.gallery || []);
-        if ((existing as any).zipCode) setZipCode((existing as any).zipCode);
-        if ((existing as any).city) setCity((existing as any).city);
+        if (existing.zipCode) setZipCode(existing.zipCode);
+        if (existing.city) setCity(existing.city);
       }
     };
     loadExisting();
@@ -78,21 +74,19 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       setPic(url);
       setToastMsg({ msg: 'Profilna slika učitana.', type: 'success' });
     } else {
-      setToastMsg({ msg: 'Upload nije uspio. Provjerite Storage Policies u Supabase dashboardu.', type: 'error' });
+      setToastMsg({ msg: 'Upload nije uspio.', type: 'error' });
     }
     setIsUploading(false);
   };
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
     setIsUploading(true);
-    const url = await StorageService.uploadPhoto(files[0], 'gallery');
+    const url = await StorageService.uploadPhoto(file, 'gallery');
     if (url) {
       setGallery(prev => [...prev, url]);
-      setToastMsg({ msg: 'Rad dodan u galeriju.', type: 'success' });
-    } else {
-      setToastMsg({ msg: 'Greška pri uploadu u galeriju.', type: 'error' });
+      setToastMsg({ msg: 'Slika dodana u galeriju.', type: 'success' });
     }
     setIsUploading(false);
   };
@@ -119,7 +113,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       gallery: gallery || [],
       workMode: workMode || 'classic',
       approved: existing ? existing.approved : false,
-      createdAt: existing ? existing.createdAt : new Date().toISOString()
+      createdAt: existing ? existing.createdAt : new Date().toISOString(),
+      workingHours: existing?.workingHours || [],
+      slotInterval: existing?.slotInterval || 45
     };
 
     if (existing?.id) profile.id = existing.id;
@@ -131,8 +127,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       setToastMsg({ msg: t.done, type: 'success' });
       setTimeout(onComplete, 1200);
     } else {
-      // Show exact DB error to help debugging
-      setToastMsg({ msg: `Spremanje nije uspjelo: ${result.error || 'Provjerite RLS polise za tablicu barbers'}`, type: 'error' });
+      setToastMsg({ msg: `Greška: ${result.error}`, type: 'error' });
     }
   };
 

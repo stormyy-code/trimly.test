@@ -4,13 +4,8 @@ import { db } from '../../store/database';
 import { BarberProfile, WorkingDay, BreakTime } from '../../types';
 import { translations, Language } from '../../translations';
 import { Card, Button, Badge, Toast } from '../../components/UI';
-import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { BARBER_INVITE_CODE } from '../../constants';
-
-interface BarberAvailabilityProps {
-  barberId: string;
-  lang: Language;
-}
 
 const getWeekNumber = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -20,11 +15,11 @@ const getWeekNumber = (date: Date) => {
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
-const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang }) => {
+const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ barberId, lang }) => {
   const t = translations[lang];
   const [barber, setBarber] = useState<BarberProfile | null>(null);
-  const [copied, setCopied] = useState(false);
   const [isNewWeek, setIsNewWeek] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   
   const [slotInterval, setSlotInterval] = useState<number>(45);
@@ -37,8 +32,6 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
     { day: 'Saturday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
     { day: 'Sunday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
   ]);
-  const [saved, setSaved] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -48,11 +41,8 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
       if (b) {
         setBarber(b);
         setSlotInterval(b.slotInterval || 45);
-        
         const currentWeek = getWeekNumber(new Date());
-        const storedWeek = (b as any).lastUpdatedWeek || 0;
-        
-        if (storedWeek !== currentWeek) {
+        if (b.lastUpdatedWeek !== currentWeek) {
           setIsNewWeek(true);
         } else if (b.workingHours) {
           setWorkingHours(b.workingHours);
@@ -63,205 +53,101 @@ const BarberAvailability: React.FC<BarberAvailabilityProps> = ({ barberId, lang 
     load();
   }, [barberId]);
 
-  const toggleDay = (index: number) => {
-    const next = [...workingHours];
-    next[index].enabled = !next[index].enabled;
-    setWorkingHours(next);
-  };
-
-  const updateTime = (index: number, field: 'startTime' | 'endTime', value: string) => {
-    const next = [...workingHours];
-    next[index][field] = value;
-    setWorkingHours(next);
-  };
-
-  const addBreak = (dayIdx: number) => {
-    const next = [...workingHours];
-    if (!next[dayIdx].breaks) next[dayIdx].breaks = [];
-    next[dayIdx].breaks.push({ startTime: '12:00', endTime: '13:00' });
-    setWorkingHours(next);
-  };
-
-  const removeBreak = (dayIdx: number, breakIdx: number) => {
-    const next = [...workingHours];
-    next[dayIdx].breaks.splice(breakIdx, 1);
-    setWorkingHours(next);
-  };
-
-  const updateBreak = (dayIdx: number, breakIdx: number, field: keyof BreakTime, value: string) => {
-    const next = [...workingHours];
-    next[dayIdx].breaks[breakIdx][field] = value;
-    setWorkingHours(next);
-  };
-
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(BARBER_INVITE_CODE);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const handleSave = async () => {
     if (!barber) return;
     setLoading(true);
     const currentWeek = getWeekNumber(new Date());
-    
     const result = await db.saveBarbers({ 
       ...barber, 
       workingHours, 
       slotInterval,
       lastUpdatedWeek: currentWeek 
-    } as any);
+    });
     
     if (result.success) {
-      setSaved(true);
       setIsNewWeek(false);
-      setToast({ msg: 'Raspored uspješno spremljen.', type: 'success' });
-      setTimeout(() => setSaved(false), 2000);
+      setToast({ msg: 'Raspored spremljen.', type: 'success' });
     } else {
-      setToast({ msg: `Greška: ${result.error || 'Neuspješno spremanje rasporeda.'}`, type: 'error' });
+      setToast({ msg: 'Greška pri spremanju.', type: 'error' });
     }
     setLoading(false);
   };
 
+  const toggleDay = (idx: number) => {
+    const next = [...workingHours];
+    next[idx].enabled = !next[idx].enabled;
+    setWorkingHours(next);
+  };
+
+  const updateTime = (idx: number, field: 'startTime' | 'endTime', val: string) => {
+    const next = [...workingHours];
+    next[idx][field] = val;
+    setWorkingHours(next);
+  };
+
+  const addBreak = (idx: number) => {
+    const next = [...workingHours];
+    if (!next[idx].breaks) next[idx].breaks = [];
+    next[idx].breaks.push({ startTime: '12:00', endTime: '13:00' });
+    setWorkingHours(next);
+  };
+
+  const removeBreak = (dIdx: number, bIdx: number) => {
+    const next = [...workingHours];
+    next[dIdx].breaks.splice(bIdx, 1);
+    setWorkingHours(next);
+  };
+
   return (
-    <div className="space-y-8 animate-slide-up pb-32 overflow-x-hidden">
+    <div className="space-y-8 animate-slide-up pb-32">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 text-center space-y-4">
-        <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mx-auto text-[#D4AF37] border border-[#D4AF37]/20">
-          <Calendar size={28} />
-        </div>
-        <div>
-          <h2 className="text-2xl font-black text-white italic tracking-tighter uppercase leading-none">{t.schedule}</h2>
-          <div 
-            onClick={handleCopyCode}
-            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/5 cursor-pointer mt-4 active:scale-95 transition-all"
-          >
-            <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">{t.barberCode}:</span>
-            <span className="text-[8px] font-black text-[#D4AF37] tracking-widest">{BARBER_INVITE_CODE}</span>
-            {copied ? <CheckCircle2 size={10} className="text-emerald-500" /> : <Copy size={10} className="text-zinc-700" />}
-          </div>
-        </div>
+        <h2 className="text-2xl font-black text-white italic tracking-tighter uppercase leading-none">{t.schedule}</h2>
       </div>
 
       {isNewWeek && (
-        <div className="mx-1 p-6 bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-[2rem] flex items-center gap-4 animate-pulse">
-          <AlertCircle className="text-[#D4AF37] shrink-0" size={24} />
+        <div className="p-6 bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-3xl flex items-center gap-4 mx-1">
+          <AlertCircle className="text-[#D4AF37]" size={24} />
           <p className="text-[10px] font-black text-white uppercase tracking-widest leading-relaxed">
-            Novi tjedan je počeo! Molimo potvrdite ili unesite novi raspored rada kako biste bili dostupni za klijente.
+            Novi tjedan je počeo! Potvrdite raspored kako biste bili vidljivi klijentima.
           </p>
         </div>
       )}
 
-      <section className="space-y-4 px-1">
-        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.3em] ml-4">{t.slotInterval}</label>
-        <div className="grid grid-cols-4 gap-2">
-          {[30, 45, 60, 90].map(val => (
-            <button 
-              key={val} 
-              onClick={() => setSlotInterval(val)}
-              className={`py-4 rounded-2xl border text-[10px] font-black transition-all ${slotInterval === val ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}
-            >
-              {val} {t.minutes}
-            </button>
-          ))}
-        </div>
-      </section>
-
       <div className="space-y-4 px-1">
-        <label className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.3em] ml-4">Radni dani i pauze</label>
         {workingHours.map((wh, idx) => (
-          <Card 
-            key={wh.day} 
-            className={`p-6 transition-all border-white/5 ${wh.enabled ? 'bg-zinc-900/40 border-white/10 shadow-xl' : 'bg-black/80 border-white/[0.05]'}`}
-          >
-            <div className="flex justify-between items-center mb-6">
+          <Card key={wh.day} className={`p-6 border-white/5 ${wh.enabled ? 'bg-zinc-900/40' : 'bg-black opacity-40'}`}>
+            <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => toggleDay(idx)}
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${wh.enabled ? 'bg-[#D4AF37] text-black shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
-                >
-                  {wh.enabled ? <Check size={20} strokeWidth={3} /> : <X size={20} />}
+                <button onClick={() => toggleDay(idx)} className={`w-10 h-10 rounded-xl flex items-center justify-center ${wh.enabled ? 'bg-[#D4AF37] text-black' : 'bg-zinc-800 text-zinc-600'}`}>
+                  {wh.enabled ? <Check size={18} /> : <X size={18} />}
                 </button>
-                <div className="flex flex-col">
-                  <span className={`font-black text-sm uppercase tracking-tight italic ${wh.enabled ? 'text-white' : 'text-zinc-700'}`}>{wh.day}</span>
-                  <span className="text-[8px] font-black uppercase text-zinc-600 tracking-widest">{wh.enabled ? 'Open' : 'Closed'}</span>
-                </div>
+                <span className="font-black text-sm uppercase italic">{wh.day}</span>
               </div>
               {wh.enabled && (
-                <div className="flex items-center gap-3">
-                   <div className="bg-zinc-950 px-3 py-2 rounded-xl border border-white/5 flex flex-col items-center min-w-[70px]">
-                      <span className="text-[6px] font-black text-zinc-600 uppercase mb-0.5">Start</span>
-                      <input 
-                        type="time" 
-                        value={wh.startTime}
-                        onChange={(e) => updateTime(idx, 'startTime', e.target.value)}
-                        className="bg-transparent text-[11px] font-black text-[#D4AF37] outline-none text-center p-0 w-full"
-                      />
-                   </div>
-                   <div className="bg-zinc-950 px-3 py-2 rounded-xl border border-white/5 flex flex-col items-center min-w-[70px]">
-                      <span className="text-[6px] font-black text-zinc-600 uppercase mb-0.5">End</span>
-                      <input 
-                        type="time" 
-                        value={wh.endTime}
-                        onChange={(e) => updateTime(idx, 'endTime', e.target.value)}
-                        className="bg-transparent text-[11px] font-black text-[#D4AF37] outline-none text-center p-0 w-full"
-                      />
-                   </div>
+                <div className="flex gap-2">
+                  <input type="time" value={wh.startTime} onChange={e => updateTime(idx, 'startTime', e.target.value)} className="bg-zinc-950 p-2 rounded-lg text-[10px] font-black text-[#D4AF37] border border-white/5" />
+                  <input type="time" value={wh.endTime} onChange={e => updateTime(idx, 'endTime', e.target.value)} className="bg-zinc-950 p-2 rounded-lg text-[10px] font-black text-[#D4AF37] border border-white/5" />
                 </div>
               )}
             </div>
-
             {wh.enabled && (
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex justify-between items-center">
-                   <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{t.breaks}</span>
-                   <button onClick={() => addBreak(idx)} className="text-[#D4AF37] text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5">
-                      <Plus size={14} /> {t.addBreak}
-                   </button>
-                </div>
-                
-                {wh.breaks?.map((brk, bIdx) => (
-                  <div key={bIdx} className="flex items-center gap-3 bg-black/40 p-3 rounded-2xl border border-white/5">
-                    <div className="flex-1 grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[7px] text-zinc-600 uppercase font-black">{t.breakStart}</span>
-                        <input 
-                          type="time" 
-                          value={brk.startTime}
-                          onChange={(e) => updateBreak(idx, bIdx, 'startTime', e.target.value)}
-                          className="bg-zinc-900 text-white rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none border border-white/5"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[7px] text-zinc-600 uppercase font-black">{t.breakEnd}</span>
-                        <input 
-                          type="time" 
-                          value={brk.endTime}
-                          onChange={(e) => updateBreak(idx, bIdx, 'endTime', e.target.value)}
-                          className="bg-zinc-900 text-white rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none border border-white/5"
-                        />
-                      </div>
+               <div className="pt-4 border-t border-white/5 space-y-3">
+                  <button onClick={() => addBreak(idx)} className="text-[8px] font-black text-[#D4AF37] uppercase tracking-widest">+ Dodaj pauzu</button>
+                  {wh.breaks?.map((b, bIdx) => (
+                    <div key={bIdx} className="flex gap-2 items-center">
+                      <input type="time" value={b.startTime} className="bg-zinc-950 p-1 rounded-lg text-[9px]" />
+                      <input type="time" value={b.endTime} className="bg-zinc-950 p-1 rounded-lg text-[9px]" />
+                      <button onClick={() => removeBreak(idx, bIdx)} className="text-red-500/50"><Trash2 size={12} /></button>
                     </div>
-                    <button onClick={() => removeBreak(idx, bIdx)} className="text-red-500/50 hover:text-red-500 p-2">
-                       <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+               </div>
             )}
           </Card>
         ))}
       </div>
 
-      <div className="px-1 pt-6">
-        <Button 
-          onClick={handleSave} 
-          loading={loading}
-          className="w-full h-20 text-xs font-black uppercase tracking-widest shadow-2xl"
-        >
-          {saved ? <><CheckCircle2 size={18} className="mr-2" /> {t.done}</> : t.save}
-        </Button>
-      </div>
+      <Button onClick={handleSave} loading={loading} className="w-full h-18 text-xs font-black shadow-2xl">Spremi raspored</Button>
     </div>
   );
 };

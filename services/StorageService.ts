@@ -10,12 +10,10 @@ export const StorageService = {
     try {
       if (!file) return null;
       
-      // Sanitize filename to avoid weird characters
       const fileExt = file.name.split('.').pop() || 'jpg';
       const cleanFileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `${path}/${cleanFileName}`;
 
-      // CRITICAL: Bucket name MUST match dashboard exactly ('trimly' not 'TRIMLY')
       const { error: uploadError } = await supabase.storage
         .from('trimly')
         .upload(filePath, file, {
@@ -24,8 +22,7 @@ export const StorageService = {
         });
 
       if (uploadError) {
-        // Log details so developer can see them in browser console
-        console.error('Storage: Upload Failed. Check bucket name and RLS policies.', uploadError);
+        console.error('Storage Upload Error:', uploadError);
         return null;
       }
 
@@ -35,7 +32,7 @@ export const StorageService = {
 
       return publicUrlData.publicUrl;
     } catch (error) {
-      console.error('Storage: Unexpected exception during upload:', error);
+      console.error('Storage Exception:', error);
       return null;
     }
   }

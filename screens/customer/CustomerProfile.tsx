@@ -40,10 +40,12 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   useEffect(() => {
     const fetchProfile = async () => {
       const { data } = await supabase.from('profiles').select('avatar_url, full_name').eq('id', user.id).maybeSingle();
-      if (data && data.avatar_url) setProfilePic(data.avatar_url);
-      if (data && data.full_name) {
-        setFullName(data.full_name);
-        setTempName(data.full_name);
+      if (data) {
+        if (data.avatar_url) setProfilePic(data.avatar_url);
+        if (data.full_name) {
+          setFullName(data.full_name);
+          setTempName(data.full_name);
+        }
       }
     };
     fetchProfile();
@@ -51,6 +53,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
 
   const handleUpdateName = async () => {
     if (!tempName.trim()) return;
+    setPassLoading(true);
     const success = await db.updateProfileDetails(user.id, { full_name: tempName });
     if (success) {
       setFullName(tempName);
@@ -58,7 +61,28 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setIsEditingName(false);
       if (onRoleUpdate) onRoleUpdate();
     } else {
-      setToastMsg({ msg: 'Greška pri spremanju.', type: 'error' });
+      setToastMsg({ msg: 'Greška pri spremanju imena.', type: 'error' });
+    }
+    setPassLoading(false);
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files ? e.target.files[0] : null;
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const url = await StorageService.uploadPhoto(file, 'profiles');
+      if (url) {
+        const success = await db.updateProfileDetails(user.id, { avatar_url: url });
+        if (success) {
+          setProfilePic(url);
+          setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
+        }
+      } else {
+        setToastMsg({ msg: 'Greška pri uploadu slike.', type: 'error' });
+      }
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -91,21 +115,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setToastMsg({ msg: 'Greška pri brisanju.', type: 'error' });
     } finally {
       setPassLoading(false);
-    }
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files ? e.target.files[0] : null;
-    if (!file) return;
-    setIsUploading(true);
-    try {
-      const url = await StorageService.uploadPhoto(file, 'avatars');
-      if (url) {
-        await db.updateProfileDetails(user.id, { avatar_url: url });
-        setProfilePic(url);
-      }
-    } finally {
-      setIsUploading(false);
     }
   };
 

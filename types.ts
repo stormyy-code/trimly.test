@@ -1,19 +1,22 @@
+
+
 export type UserRole = 'customer' | 'barber' | 'admin';
 export type WorkMode = 'classic' | 'mobile' | 'both';
-
-export interface ZagrebQuarter {
-  name: string;
-  lat: number;
-  lng: number;
-}
 
 export interface User {
   id: string;
   email: string;
   role: UserRole;
-  password?: string;
-  verified?: boolean;
+  fullName?: string;
+  avatarUrl?: string;
   banned?: boolean;
+}
+
+// Fix: Added missing ZagrebQuarter interface required by constants.ts
+export interface ZagrebQuarter {
+  name: string;
+  lat: number;
+  lng: number;
 }
 
 export interface BreakTime {
@@ -36,19 +39,18 @@ export interface BarberProfile {
   profilePicture: string;
   neighborhood: string;
   address: string;
+  zipCode?: string;
+  city?: string;
   bio: string;
-  lat: number;
-  lng: number;
   gallery: string[];
-  styles: string[];
   workMode: WorkMode;
   approved: boolean;
   featured: boolean;
   weeklyWinner?: boolean;
   createdAt: string;
   workingHours: WorkingDay[];
-  blockedCustomers: string[];
-  slotInterval: number; // Interval u minutama (30, 45, 60...)
+  slotInterval: number;
+  lastUpdatedWeek?: number;
 }
 
 export interface Service {

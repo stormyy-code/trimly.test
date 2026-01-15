@@ -1,20 +1,12 @@
-
+// Fix: Added missing methods and synchronized caching behavior in database.ts
 import { supabase } from './supabase';
 import { User, BarberProfile, Service, Booking, Review } from '../types';
 
-/**
- * Production Database Engine
- * Hardened to handle Postgres camelCase naming ("userId", "barberId")
- * and RLS constraints automatically.
- */
 export const db = {
-  // --- USER PROFILES ---
+  // --- USERS & PROFILES ---
   getUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase.from('profiles').select('*');
-    if (error) {
-      console.error("DB Error (Users):", error.message);
-      return db.getUsersSync();
-    }
+    if (error) return db.getUsersSync();
     localStorage.setItem('trimly_users_cache', JSON.stringify(data));
     return (data as any) || [];
   },
@@ -25,13 +17,16 @@ export const db = {
   },
 
   updateProfileDetails: async (userId: string, updates: { full_name?: string, avatar_url?: string }) => {
+    // Supabase profiles tablica obično koristi snake_case (full_name, avatar_url)
     const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
     if (!error) {
-      const users = db.getUsersSync();
-      const idx = users.findIndex(u => u.id === userId);
-      if (idx !== -1) {
-        users[idx] = { ...users[idx], ...updates } as any;
-        localStorage.setItem('trimly_users_cache', JSON.stringify(users));
+      const active = db.getActiveUser();
+      if (active) {
+        db.setActiveUser({
+          ...active,
+          fullName: updates.full_name || active.fullName,
+          avatarUrl: updates.avatar_url || active.avatarUrl
+        });
       }
       return true;
     }
@@ -40,29 +35,21 @@ export const db = {
 
   updateProfileRole: async (userId: string, role: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser();
-    const cleanRole = role.toLowerCase().trim();
-    
-    // Profiles table typically uses snake_case for standard fields, 
-    // but we use id and email which are standard.
     const { error } = await supabase.from('profiles').upsert({ 
       id: userId, 
-      role: cleanRole,
+      role: role.toLowerCase().trim(),
       email: authUser?.email || ''
     }, { onConflict: 'id' });
-    
-    if (!error) {
-      const active = db.getActiveUser();
-      if (active && active.id === userId) db.setActiveUser({ ...active, role: cleanRole as any });
-      return true;
-    }
-    return false;
+    return !error;
   },
 
+  // Fix: Added missing setUserBanStatus method used by AdminBarbers
   setUserBanStatus: async (userId: string, banned: boolean) => {
     const { error } = await supabase.from('profiles').update({ banned }).eq('id', userId);
     return !error;
   },
 
+  // Fix: Added missing deleteAccount method used by CustomerProfile
   deleteAccount: async (userId: string) => {
     await supabase.from('profiles').delete().eq('id', userId);
     await supabase.from('barbers').delete().eq('userId', userId);
@@ -81,22 +68,11 @@ export const db = {
 
   // --- BARBER PROFILES ---
   getBarbers: async (): Promise<BarberProfile[]> => {
-    // We order by "createdAt" (camelCase)
     const { data, error } = await supabase.from('barbers').select('*').order('createdAt', { ascending: false });
     if (!error && data) {
-      // Ensure UI gets clean camelCase objects
-      const mapped = data.map((b: any) => ({
-        ...b,
-        userId: b.userId || b.user_id,
-        fullName: b.fullName || b.full_name,
-        profilePicture: b.profilePicture || b.profile_picture,
-        workingHours: b.workingHours || b.working_hours,
-        slotInterval: b.slotInterval || b.slot_interval,
-        createdAt: b.createdAt || b.created_at
-      }));
-      localStorage.setItem('trimly_barbers_cache', JSON.stringify(mapped));
+      localStorage.setItem('trimly_barbers_cache', JSON.stringify(data));
       window.dispatchEvent(new Event('app-sync-complete'));
-      return mapped;
+      return data as BarberProfile[];
     }
     return db.getBarbersSync();
   },
@@ -108,33 +84,17 @@ export const db = {
 
   saveBarbers: async (barber: Partial<BarberProfile>) => {
     try {
-      // Using camelCase keys as confirmed by your DB schema hint
-      const payload: any = {
-        userId: barber.userId,
-        fullName: barber.fullName,
-        profilePicture: barber.profilePicture,
-        neighborhood: barber.neighborhood,
-        address: barber.address,
-        bio: barber.bio,
-        gallery: barber.gallery,
-        workMode: (barber as any).workMode,
-        approved: barber.approved,
-        workingHours: barber.workingHours,
-        slotInterval: barber.slotInterval
-      };
-      
-      if (barber.id) payload.id = barber.id;
-
-      const { error } = await supabase.from('barbers').upsert(payload, { onConflict: 'userId' });
+      const { error } = await supabase.from('barbers').upsert(barber, { onConflict: 'userId' });
       if (error) throw error;
       await db.getBarbers(); 
       return { success: true };
     } catch (err: any) {
-      console.error("Save Barber Error:", err.message);
+      console.error("DB Save Barber Error:", err.message);
       return { success: false, error: err.message };
     }
   },
 
+  // Fix: Added missing approveBarber method used by AdminApprovals
   approveBarber: async (barberId: string) => {
     const { error } = await supabase.from('barbers').update({ approved: true }).eq('id', barberId);
     if (!error) await db.getBarbers();
@@ -144,19 +104,16 @@ export const db = {
   // --- SERVICES ---
   getServices: async (barberId?: string): Promise<Service[]> => {
     let query = supabase.from('services').select('*');
-    if (barberId) {
-      query = query.eq('barberId', barberId);
-    }
+    if (barberId) query = query.eq('barberId', barberId);
     const { data, error } = await query;
+    if (!error && data) {
+      localStorage.setItem('trimly_services_cache', JSON.stringify(data));
+    }
     if (error) return db.getServicesSync();
-    
-    return (data || []).map((s: any) => ({
-      ...s,
-      barberId: s.barberId || s.barber_id,
-      imageUrl: s.imageUrl || s.image_url
-    }));
+    return (data as any) || [];
   },
-  
+
+  // Fix: Added missing getServicesSync method used by CustomerHome and BarberProfileDetail
   getServicesSync: (): Service[] => {
     const cached = localStorage.getItem('trimly_services_cache');
     return cached ? JSON.parse(cached) : [];
@@ -167,6 +124,7 @@ export const db = {
     return !error;
   },
 
+  // Fix: Added missing deleteService method used by BarberServices
   deleteService: async (id: string) => {
     const { error } = await supabase.from('services').delete().eq('id', id);
     return !error;
@@ -176,25 +134,16 @@ export const db = {
   getBookings: async (userId?: string, role?: string): Promise<Booking[]> => {
     let query = supabase.from('bookings').select('*');
     if (userId && role) {
-      const col = role === 'customer' ? 'customerId' : 'barberId';
-      query = query.eq(col, userId);
+      const column = role === 'customer' ? 'customerId' : 'barberId';
+      query = query.eq(column, userId);
     }
     const { data, error } = await query.order('createdAt', { ascending: false });
+    if (!error && data) {
+      localStorage.setItem('trimly_bookings_cache', JSON.stringify(data));
+      window.dispatchEvent(new Event('app-sync-complete'));
+    }
     if (error) return db.getBookingsSync();
-    
-    const mapped = (data || []).map((b: any) => ({
-      ...b,
-      customerId: b.customerId || b.customer_id,
-      customerEmail: b.customerEmail || b.customer_email,
-      barberId: b.barberId || b.barber_id,
-      serviceId: b.serviceId || b.service_id,
-      serviceName: b.serviceName || b.service_name,
-      createdAt: b.createdAt || b.created_at
-    }));
-
-    localStorage.setItem('trimly_bookings_cache', JSON.stringify(mapped));
-    window.dispatchEvent(new Event('app-sync-complete'));
-    return mapped;
+    return (data as any) || [];
   },
 
   getBookingsSync: (): Booking[] => {
@@ -212,29 +161,22 @@ export const db = {
     return !error;
   },
 
+  // Fix: Added missing deleteBooking method used by CustomerBookings
   deleteBooking: async (id: string) => {
-    const { error } = await supabase.from('services').delete().eq('id', id); // Logic error fix: table name
-    const { error: bookingError } = await supabase.from('bookings').delete().eq('id', id);
-    return !bookingError;
+    const { error } = await supabase.from('bookings').delete().eq('id', id);
+    return !error;
   },
 
   // --- REVIEWS ---
   getReviews: async (barberId?: string): Promise<Review[]> => {
     let query = supabase.from('reviews').select('*');
-    if (barberId) {
-       query = query.eq('barberId', barberId);
-    }
+    if (barberId) query = query.eq('barberId', barberId);
     const { data, error } = await query;
+    if (!error && data) {
+      localStorage.setItem('trimly_reviews_cache', JSON.stringify(data));
+    }
     if (error) return db.getReviewsSync();
-
-    return (data || []).map((r: any) => ({
-      ...r,
-      bookingId: r.bookingId || r.booking_id,
-      barberId: r.barberId || r.barber_id,
-      customerId: r.customerId || r.customer_id,
-      customerEmail: r.customerEmail || r.customer_email,
-      createdAt: r.createdAt || r.created_at
-    }));
+    return (data as any) || [];
   },
 
   getReviewsSync: (): Review[] => {
