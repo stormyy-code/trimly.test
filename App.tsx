@@ -41,14 +41,13 @@ const App: React.FC = () => {
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
     try {
-      db.getBarbers();
-      db.getReviews();
-      db.getServices();
-      db.getBookings(uId, uRole);
+      // Svi trebaju profile za provjeru licenci na ljestvici/home
+      await db.getUsers(); 
+      await db.getBarbers();
+      await db.getReviews();
+      await db.getServices();
+      await db.getBookings(uId, uRole);
       
-      if (uRole === 'admin') {
-        db.getUsers();
-      }
       window.dispatchEvent(new Event('app-sync-complete'));
     } catch (e) {
       console.warn("Sync error:", e);
@@ -76,7 +75,6 @@ const App: React.FC = () => {
         id: supabaseUser.id, 
         email: supabaseUser.email || '', 
         role: finalRole,
-        // Promjena ovdje: čitamo fullName/avatarUrl
         fullName: profile?.fullName || profile?.full_name || '',
         avatarUrl: profile?.avatarUrl || profile?.avatar_url || '',
         banned: profile?.banned || false
@@ -150,11 +148,29 @@ const App: React.FC = () => {
       }
     });
 
+    // REALTIME: Prati promjene licenci globalno
+    const profileChannel = supabase
+      .channel('public-profiles')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+        if (payload.new) {
+          const { id, banned } = payload.new;
+          // Emitiraj event za sinkronizaciju tabova
+          window.dispatchEvent(new CustomEvent('users-registry-updated', { detail: { userId: id, banned } }));
+          // Ako je trenutni korisnik dobio ban, izlogiraj ga ili obavijesti
+          if (id === user?.id && banned === true) {
+            setToast({ message: translations[lang].suspendedError, type: 'error' });
+            setTimeout(handleLogout, 2000);
+          }
+        }
+      })
+      .subscribe();
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      supabase.removeChannel(profileChannel);
     };
-  }, [handleAuthUser]);
+  }, [handleAuthUser, user?.id, lang]);
 
   const handleLogout = async () => {
     setIsInitializing(true);
@@ -186,7 +202,6 @@ const App: React.FC = () => {
         : <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser as any} onToggle={() => setActiveTab('register')} dbStatus={dbStatus} />;
     }
 
-    // Common Profile Detail logic for all roles
     if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
 
     if (user.role === 'customer') {

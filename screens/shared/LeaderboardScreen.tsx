@@ -3,6 +3,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { db } from '../../store/database';
 import { Card } from '../../components/UI';
 import { translations, Language } from '../../translations';
+import { User } from '../../types';
 import { Trophy, Crown, Star, Loader2, ChevronRight } from 'lucide-react';
 
 interface LeaderboardScreenProps {
@@ -11,25 +12,53 @@ interface LeaderboardScreenProps {
 }
 
 const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBarber }) => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  // Inicijaliziraj iz cache-a odmah da izbjegnemo flicker starog stanja
+  const [users, setUsers] = useState<User[]>(db.getUsersSync());
+  const [tick, setTick] = useState(0);
   const t = translations[lang];
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      await Promise.allSettled([
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const uRes = await db.getUsers();
+      setUsers(uRes);
+      // Osvježi i ostalo
+      await Promise.all([
         db.getReviews(),
         db.getBookings(),
         db.getBarbers()
       ]);
-      setLoading(false);
-    };
+    } catch (e) {}
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchData();
+
+    const handleRegistryUpdate = (e: any) => {
+      const { userId, banned } = e.detail || {};
+      if (userId) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, banned } : u));
+        setTick(t => t + 1);
+      }
+    };
+
+    window.addEventListener('users-registry-updated', handleRegistryUpdate);
+    return () => window.removeEventListener('users-registry-updated', handleRegistryUpdate);
   }, []);
 
   const reviews = db.getReviewsSync();
   const bookings = db.getBookingsSync().filter(b => b.status === 'completed');
-  const rawBarbers = db.getBarbersSync().filter(b => b.approved);
+  
+  const rawBarbers = useMemo(() => {
+    const all = db.getBarbersSync();
+    return all.filter(b => {
+      const u = users.find(user => user.id === b.userId);
+      // STROGO: Barber se prikazuje samo ako profil postoji i banned je EKSPLICITNO false/undefined
+      return b.approved === true && u && u.banned !== true;
+    });
+  }, [users, tick]);
 
   const data = useMemo(() => {
     return rawBarbers.map(barber => {
@@ -54,15 +83,6 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
     });
   }, [rawBarbers, bookings, reviews]);
 
-  if (loading && data.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 space-y-4">
-        <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
-        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest italic">Ažuriranje ljestvice...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8 animate-slide-up pb-32 bg-black min-h-screen">
       <div className="premium-blur bg-[#D4AF37]/5 rounded-[3rem] p-10 border border-[#D4AF37]/20 flex flex-col items-center gap-6 mt-4">
@@ -77,7 +97,12 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
       </div>
 
       <section className="space-y-4 px-2">
-        {data.length === 0 ? (
+        {loading && data.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+             <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
+             <span className="text-[10px] font-black text-zinc-800 uppercase tracking-widest">Sinkronizacija ljestvice...</span>
+          </div>
+        ) : data.length === 0 ? (
           <div className="py-20 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">Trenutno nema rangiranih barbera</div>
         ) : data.map((barber, index) => {
           const isWinner = index === 0;

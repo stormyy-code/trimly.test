@@ -2,9 +2,9 @@
 import React, { useState, useMemo } from 'react';
 import { db } from '../../store/database';
 import { Service, Booking, User, WorkingDay } from '../../types';
-import { Button, Card, Badge } from '../../components/UI';
+import { Button, Card, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2 } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -26,6 +26,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const [step, setStep] = useState<'details' | 'success'>('details');
   const [activeTab, setActiveTab] = useState<'info' | 'services'>('info');
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
 
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
@@ -126,25 +127,43 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     if (!selectedService || !selectedDate || !selectedTime || !barber) return;
     setLoading(true);
 
-    const newBooking: Booking = {
-      id: Math.random().toString(36).substring(2, 11),
-      customerId: user.id,
-      customerEmail: user.email,
-      barberId: barber.id,
-      serviceId: selectedService.id,
-      serviceName: selectedService.name,
-      date: selectedDate,
-      time: selectedTime,
-      price: selectedService.price,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const generateId = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      };
 
-    const success = await db.createBooking(newBooking);
-    if (success) {
-      setStep('success');
+      const newBooking: Booking = {
+        id: generateId(),
+        customerId: user.id,
+        customerEmail: user.email,
+        barberId: barber.id,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        date: selectedDate,
+        time: selectedTime,
+        price: selectedService.price,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      const result = await db.createBooking(newBooking);
+      if (result.success) {
+        setStep('success');
+      } else {
+        setToast({ 
+          message: lang === 'hr' ? `Rezervacija nije uspjela: ${result.error}` : `Booking failed: ${result.error}`, 
+          type: 'error' 
+        });
+      }
+    } catch (err: any) {
+      setToast({ 
+        message: lang === 'hr' ? `Došlo je do neočekivane greške: ${err.message}` : `An unexpected error occurred: ${err.message}`, 
+        type: 'error' 
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const SafeImage = ({ src, className, isAvatar = false }: { src: string, className: string, isAvatar?: boolean }) => {
@@ -180,6 +199,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
   return (
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
       {/* Sticky Header */}
       <div className="sticky top-0 left-0 right-0 z-50 bg-black/90 premium-blur border-b border-white/5 px-6 py-4 flex justify-between items-center pt-safe">
         <button onClick={onBack} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-400 active:scale-90 transition-all border border-white/5">
@@ -199,7 +220,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
       <div className="px-6 py-6 space-y-10 min-h-screen">
         <div className="flex flex-col items-start gap-6">
-          {/* Fiksni kvadratni profilni okvir u boji */}
           <div className="w-24 h-24 bg-zinc-900 border border-white/10 rounded-[1.75rem] overflow-hidden shadow-2xl flex-shrink-0">
             <SafeImage src={barber.profilePicture} className="" isAvatar={true} />
           </div>
@@ -216,7 +236,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           </div>
         </div>
 
-        {/* Galerija radova u boji */}
         {barber.gallery && barber.gallery.length > 0 && (
           <section className="space-y-4 pt-2">
              <div className="flex items-center gap-3">
@@ -226,7 +245,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
              <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6">
                 {barber.gallery.map((img, idx) => (
                   <div key={idx} className="shrink-0 w-60 aspect-[3/4] rounded-[2rem] overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl">
-                    <SafeImage src={img} className="transition-all duration-700" />
+                    <SafeImage src={img} className="" />
                   </div>
                 ))}
              </div>
@@ -281,7 +300,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
       {/* Booking Drawer */}
       {selectedService && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 p-8 z-[110] rounded-t-[3.5rem] shadow-2xl animate-slide-up space-y-8 premium-blur pb-safe">
+        <div className="fixed bottom-0 left-0 right-0 bg-black/95 border-t border-white/10 p-8 z-[150] rounded-t-[3.5rem] shadow-2xl animate-slide-up space-y-8 premium-blur pb-safe max-w-2xl mx-auto">
           <button 
             onClick={() => { setSelectedService(null); setSelectedDate(''); setSelectedTime(''); }}
             className="absolute top-6 right-8 w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
@@ -304,7 +323,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           </div>
 
           {selectedDate && (
-            <div className="grid grid-cols-4 gap-2.5 animate-lux-fade">
+            <div className="grid grid-cols-4 gap-2.5 animate-lux-fade max-h-40 overflow-y-auto scrollbar-hide">
               {timeSlots.length === 0 ? (
                 <div className="col-span-4 py-8 text-center text-[9px] font-black uppercase tracking-widest text-zinc-600">Nema dostupnih termina za ovaj dan.</div>
               ) : timeSlots.map(slot => (
@@ -320,8 +339,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
             </div>
           )}
           
-          <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-18 text-xs font-black uppercase tracking-widest">
-            Potvrdi Rezervaciju
+          <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-18 text-xs font-black uppercase tracking-widest shadow-2xl relative z-[160]">
+            {loading ? <Loader2 className="animate-spin" size={20} /> : 'Potvrdi Rezervaciju'}
           </Button>
         </div>
       )}

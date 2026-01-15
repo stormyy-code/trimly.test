@@ -2,20 +2,44 @@
 import { supabase } from './supabase';
 import { User, BarberProfile, Service, Booking, Review } from '../types';
 
+// Privatna memorija modula koja perzistira dok god je aplikacija otvorena
+let _usersRegistry: User[] = [];
+// Lista ID-ova koji su nedavno banani da bi spriječili "povratak" zbog mrežnog laga
+const _recentBanLocks = new Map<string, boolean>();
+
 export const db = {
   // --- USERS & PROFILES ---
   getUsers: async (): Promise<User[]> => {
     try {
       const { data, error } = await supabase.from('profiles').select('*');
       if (error) return db.getUsersSync();
-      localStorage.setItem('trimly_users_cache', JSON.stringify(data));
-      return (data as any) || [];
+      
+      let users = (data as any) || [];
+      
+      // Ako imamo lokalne "lockove" (nedavne promjene licenci), force-amo to stanje
+      if (_recentBanLocks.size > 0) {
+        users = users.map(u => {
+          if (_recentBanLocks.has(u.id)) {
+            return { ...u, banned: _recentBanLocks.get(u.id) };
+          }
+          return u;
+        });
+      }
+
+      _usersRegistry = users;
+      localStorage.setItem('trimly_users_cache', JSON.stringify(users));
+      return users;
     } catch (e) { return db.getUsersSync(); }
   },
 
   getUsersSync: (): User[] => {
-    const cached = localStorage.getItem('trimly_users_cache');
-    return cached ? JSON.parse(cached) : [];
+    if (_usersRegistry.length > 0) return _usersRegistry;
+    try {
+      const cached = localStorage.getItem('trimly_users_cache');
+      const parsed = cached ? JSON.parse(cached) : [];
+      _usersRegistry = parsed;
+      return parsed;
+    } catch (e) { return []; }
   },
 
   updateProfileDetails: async (userId: string, updates: { fullName?: string, avatarUrl?: string }) => {
@@ -23,29 +47,13 @@ export const db = {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return false;
 
-      console.log("LOG: Pokušaj sinkronizacije profila...", updates);
-
-      let profileUpdated = false;
-      let barberUpdated = false;
-
-      // 1. Pokušaj ažurirati 'profiles' tablicu
       const { error: profileError } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', userId);
       
-      if (profileError) {
-        if (profileError.message.includes("column") || profileError.code === '42703') {
-          console.error("⚠️ SUPABASE GREŠKA: Kolone 'fullName' ili 'avatarUrl' ne postoje u tablici 'profiles'!");
-          console.info("RJEŠENJE: Odi u Supabase SQL Editor i pokreni: ALTER TABLE profiles ADD COLUMN \"fullName\" text, ADD COLUMN \"avatarUrl\" text;");
-        } else {
-          console.error("❌ RLS ili druga greška u 'profiles':", profileError.message);
-        }
-      } else {
-        profileUpdated = true;
-      }
+      if (profileError) return false;
 
-      // 2. Ako je korisnik barber, ažuriraj i tablicu 'barbers' (tamo kolone obično postoje)
       const active = db.getActiveUser();
       if (active && active.role === 'barber') {
         const bUpdates: any = {};
@@ -53,52 +61,92 @@ export const db = {
         if (updates.avatarUrl) bUpdates.profilePicture = updates.avatarUrl;
 
         if (Object.keys(bUpdates).length > 0) {
-          const { error: barberError } = await supabase
-            .from('barbers')
-            .update(bUpdates)
-            .eq('userId', userId);
-            
-          if (!barberError) barberUpdated = true;
-          else console.warn("⚠️ Problem s ažuriranjem 'barbers' tablice:", barberError.message);
+          await supabase.from('barbers').update(bUpdates).eq('userId', userId);
         }
       }
 
-      // Smatramo uspjehom ako je barem jedna tablica prošla
-      if (profileUpdated || barberUpdated) {
-        if (active && active.id === userId) {
-          const updatedUser = {
-            ...active,
-            fullName: updates.fullName !== undefined ? updates.fullName : active.fullName,
-            avatarUrl: updates.avatarUrl !== undefined ? updates.avatarUrl : active.avatarUrl
-          };
-          db.setActiveUser(updatedUser);
-        }
-        window.dispatchEvent(new Event('user-profile-updated'));
-        return true;
-      }
+      _usersRegistry = _usersRegistry.map(u => u.id === userId ? { ...u, ...updates } : u);
+      localStorage.setItem('trimly_users_cache', JSON.stringify(_usersRegistry));
 
-      return false;
+      if (active && active.id === userId) {
+        db.setActiveUser({ ...active, ...updates });
+      }
+      
+      window.dispatchEvent(new Event('user-profile-updated'));
+      return true;
     } catch (err) {
-      console.error("LOG: Kritična greška sustava:", err);
       return false;
     }
   },
 
   updateProfileRole: async (userId: string, role: string) => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('profiles').upsert({ 
-        id: userId, 
-        role: role.toLowerCase().trim(),
-        email: authUser?.email || ''
-      }, { onConflict: 'id' });
-      return !error;
-    } catch (e) { return false; }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: role.toLowerCase().trim() })
+        .eq('id', userId);
+      
+      if (error) return false;
+
+      _usersRegistry = db.getUsersSync().map(u => u.id === userId ? { ...u, role: role as any } : u);
+      localStorage.setItem('trimly_users_cache', JSON.stringify(_usersRegistry));
+
+      const active = db.getActiveUser();
+      if (active && active.id === userId) {
+        db.setActiveUser({ ...active, role: role as any });
+      }
+      
+      window.dispatchEvent(new Event('user-profile-updated'));
+      return true;
+    } catch (err) {
+      return false;
+    }
   },
 
   setUserBanStatus: async (userId: string, banned: boolean) => {
-    const { error } = await supabase.from('profiles').update({ banned }).eq('id', userId);
-    return !error;
+    try {
+      const activeUser = db.getActiveUser();
+      if (!activeUser || activeUser.role !== 'admin') {
+        return { success: false, error: 'Samo administrator može upravljati licencama.' };
+      }
+
+      // 1. Ažuriraj bazu i odmah zatraži povratni podatak
+      const { data: updateResult, error } = await supabase
+        .from('profiles')
+        .update({ banned })
+        .eq('id', userId)
+        .select('id, banned')
+        .single();
+
+      if (error) {
+        console.error("Supabase Error:", error);
+        return { success: false, error: error.message };
+      }
+      
+      // 2. VERIFIKACIJA: Ako updateResult.banned nije ono što smo poslali, RLS blokira promjenu
+      if (!updateResult || updateResult.banned !== banned) {
+        return { 
+          success: false, 
+          error: 'Baza je odbila promjenu. Provjerite SQL polise (Admin dozvole).' 
+        };
+      }
+      
+      // 3. KLJUČNO: Dodaj lock u memoriju da fetch ne prebriše ovo stanje idućih 15 sekundi
+      _recentBanLocks.set(userId, banned);
+      setTimeout(() => _recentBanLocks.delete(userId), 15000);
+
+      // Sinkroniziraj lokalno stanje odmah
+      _usersRegistry = db.getUsersSync().map(u => u.id === userId ? { ...u, banned } : u);
+      localStorage.setItem('trimly_users_cache', JSON.stringify(_usersRegistry));
+      
+      window.dispatchEvent(new CustomEvent('users-registry-updated', { 
+        detail: { userId, banned } 
+      }));
+      
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   },
 
   deleteAccount: async (userId: string) => {
@@ -119,7 +167,6 @@ export const db = {
     else localStorage.removeItem('trimly_active_user');
   },
 
-  // --- BARBER PROFILES ---
   getBarbers: async (): Promise<BarberProfile[]> => {
     try {
       const { data, error } = await supabase.from('barbers').select('*').order('createdAt', { ascending: false });
@@ -144,7 +191,6 @@ export const db = {
       await db.getBarbers(); 
       return { success: true };
     } catch (err: any) {
-      console.error("DB Save Barber Error:", err.message);
       return { success: false, error: err.message };
     }
   },
@@ -155,7 +201,6 @@ export const db = {
     return !error;
   },
 
-  // --- SERVICES ---
   getServices: async (barberId?: string): Promise<Service[]> => {
     try {
       let query = supabase.from('services').select('*');
@@ -164,8 +209,7 @@ export const db = {
       if (!error && data) {
         localStorage.setItem('trimly_services_cache', JSON.stringify(data));
       }
-      if (error) return db.getServicesSync();
-      return (data as any) || [];
+      return (data as any) || db.getServicesSync();
     } catch (e) { return db.getServicesSync(); }
   },
 
@@ -184,7 +228,6 @@ export const db = {
     return !error;
   },
 
-  // --- BOOKINGS ---
   getBookings: async (userId?: string, role?: string): Promise<Booking[]> => {
     try {
       let query = supabase.from('bookings').select('*');
@@ -197,8 +240,7 @@ export const db = {
         localStorage.setItem('trimly_bookings_cache', JSON.stringify(data));
         window.dispatchEvent(new Event('app-sync-complete'));
       }
-      if (error) return db.getBookingsSync();
-      return (data as any) || [];
+      return (data as any) || db.getBookingsSync();
     } catch (e) { return db.getBookingsSync(); }
   },
 
@@ -208,8 +250,13 @@ export const db = {
   },
 
   createBooking: async (booking: any) => {
-    const { error } = await supabase.from('bookings').insert(booking);
-    return !error;
+    try {
+      const { error } = await supabase.from('bookings').insert(booking);
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   },
 
   updateBookingStatus: async (bookingId: string, status: string) => {
@@ -218,11 +265,14 @@ export const db = {
   },
 
   deleteBooking: async (id: string) => {
-    const { error } = await supabase.from('bookings').delete().eq('id', id);
-    return !error;
+    try {
+      const { error } = await supabase.from('bookings').delete().eq('id', id);
+      return { success: !error, error: error?.message };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   },
 
-  // --- REVIEWS ---
   getReviews: async (barberId?: string): Promise<Review[]> => {
     try {
       let query = supabase.from('reviews').select('*');
@@ -231,8 +281,7 @@ export const db = {
       if (!error && data) {
         localStorage.setItem('trimly_reviews_cache', JSON.stringify(data));
       }
-      if (error) return db.getReviewsSync();
-      return (data as any) || [];
+      return (data as any) || db.getReviewsSync();
     } catch (e) { return db.getReviewsSync(); }
   },
 

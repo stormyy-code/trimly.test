@@ -130,7 +130,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
             >
               {imageUrl ? (
                 <>
-                  <SafeImage src={imageUrl} className="transition-all" />
+                  <SafeImage src={imageUrl} className="" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                      <Camera size={32} className="text-white" />
                   </div>
@@ -173,7 +173,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
         ) : services.map(service => (
           <Card key={service.id} className="p-5 flex gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2.25rem]">
             <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
-               <SafeImage src={service.imageUrl || ''} className="group-hover:grayscale-0 transition-all duration-500" />
+               <SafeImage src={service.imageUrl || ''} className="" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-lg font-black text-white italic uppercase tracking-tighter truncate leading-none">{service.name}</h3>

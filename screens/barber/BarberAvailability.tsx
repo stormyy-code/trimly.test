@@ -5,7 +5,6 @@ import { BarberProfile, WorkingDay, BreakTime } from '../../types';
 import { translations, Language } from '../../translations';
 import { Card, Button, Badge, Toast } from '../../components/UI';
 import { Clock, Calendar, Check, X, Plus, Trash2, Copy, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { BARBER_INVITE_CODE } from '../../constants';
 
 const getWeekNumber = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -32,6 +31,16 @@ const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ ba
     { day: 'Saturday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
     { day: 'Sunday', enabled: false, startTime: '10:00', endTime: '14:00', breaks: [] },
   ]);
+
+  const dayTranslations: Record<string, string> = {
+    'Monday': lang === 'hr' ? 'Ponedjeljak' : 'Monday',
+    'Tuesday': lang === 'hr' ? 'Utorak' : 'Tuesday',
+    'Wednesday': lang === 'hr' ? 'Srijeda' : 'Wednesday',
+    'Thursday': lang === 'hr' ? 'Četvrtak' : 'Thursday',
+    'Friday': lang === 'hr' ? 'Petak' : 'Friday',
+    'Saturday': lang === 'hr' ? 'Subota' : 'Saturday',
+    'Sunday': lang === 'hr' ? 'Nedjelja' : 'Sunday',
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -98,56 +107,123 @@ const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ ba
     setWorkingHours(next);
   };
 
+  const updateBreakTime = (dIdx: number, bIdx: number, field: 'startTime' | 'endTime', val: string) => {
+    const next = [...workingHours];
+    next[dIdx].breaks[bIdx][field] = val;
+    setWorkingHours(next);
+  };
+
   return (
     <div className="space-y-8 animate-slide-up pb-32">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 text-center space-y-4">
+      
+      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 flex items-center justify-between border border-white/10 mx-1">
         <h2 className="text-2xl font-black text-white italic tracking-tighter uppercase leading-none">{t.schedule}</h2>
+        <div className="flex items-center gap-3">
+          <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Minuta:</span>
+          <select 
+            value={slotInterval} 
+            onChange={(e) => setSlotInterval(Number(e.target.value))}
+            className="bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black text-[#D4AF37] outline-none"
+          >
+            <option value={30}>30</option>
+            <option value={45}>45</option>
+            <option value={60}>60</option>
+          </select>
+        </div>
       </div>
 
       {isNewWeek && (
         <div className="p-6 bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-3xl flex items-center gap-4 mx-1">
           <AlertCircle className="text-[#D4AF37]" size={24} />
           <p className="text-[10px] font-black text-white uppercase tracking-widest leading-relaxed">
-            Novi tjedan je počeo! Potvrdite raspored kako biste bili vidljivi klijentima.
+            Novi tjedan je počeo! Potvrdite raspored kako biste bili vidljivi klijentima u mreži.
           </p>
         </div>
       )}
 
       <div className="space-y-4 px-1">
         {workingHours.map((wh, idx) => (
-          <Card key={wh.day} className={`p-6 border-white/5 ${wh.enabled ? 'bg-zinc-900/40' : 'bg-black opacity-40'}`}>
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-4">
-                <button onClick={() => toggleDay(idx)} className={`w-10 h-10 rounded-xl flex items-center justify-center ${wh.enabled ? 'bg-[#D4AF37] text-black' : 'bg-zinc-800 text-zinc-600'}`}>
-                  {wh.enabled ? <Check size={18} /> : <X size={18} />}
+          <Card key={wh.day} className={`p-5 border-white/5 transition-all ${wh.enabled ? 'bg-zinc-950 shadow-xl' : 'bg-black opacity-30'}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button 
+                  onClick={() => toggleDay(idx)} 
+                  className={`w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center transition-all ${wh.enabled ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20' : 'bg-zinc-900 text-zinc-700 border border-white/5'}`}
+                >
+                  {wh.enabled ? <Check size={18} strokeWidth={3} /> : <X size={18} strokeWidth={3} />}
                 </button>
-                <span className="font-black text-sm uppercase italic">{wh.day}</span>
+                <span className="font-black text-[13px] uppercase italic tracking-tighter truncate text-white">
+                  {dayTranslations[wh.day]}
+                </span>
               </div>
+
               {wh.enabled && (
-                <div className="flex gap-2">
-                  <input type="time" value={wh.startTime} onChange={e => updateTime(idx, 'startTime', e.target.value)} className="bg-zinc-950 p-2 rounded-lg text-[10px] font-black text-[#D4AF37] border border-white/5" />
-                  <input type="time" value={wh.endTime} onChange={e => updateTime(idx, 'endTime', e.target.value)} className="bg-zinc-950 p-2 rounded-lg text-[10px] font-black text-[#D4AF37] border border-white/5" />
+                <div className="flex items-center gap-1.5 shrink-0 bg-white/5 p-1 rounded-2xl border border-white/5">
+                  <input 
+                    type="time" 
+                    value={wh.startTime} 
+                    onChange={e => updateTime(idx, 'startTime', e.target.value)} 
+                    className="bg-transparent px-2 py-2 text-[11px] font-black text-[#D4AF37] outline-none" 
+                  />
+                  <div className="w-1.5 h-[1px] bg-zinc-800"></div>
+                  <input 
+                    type="time" 
+                    value={wh.endTime} 
+                    onChange={e => updateTime(idx, 'endTime', e.target.value)} 
+                    className="bg-transparent px-2 py-2 text-[11px] font-black text-[#D4AF37] outline-none" 
+                  />
                 </div>
               )}
             </div>
+
             {wh.enabled && (
-               <div className="pt-4 border-t border-white/5 space-y-3">
-                  <button onClick={() => addBreak(idx)} className="text-[8px] font-black text-[#D4AF37] uppercase tracking-widest">+ Dodaj pauzu</button>
-                  {wh.breaks?.map((b, bIdx) => (
-                    <div key={bIdx} className="flex gap-2 items-center">
-                      <input type="time" value={b.startTime} className="bg-zinc-950 p-1 rounded-lg text-[9px]" />
-                      <input type="time" value={b.endTime} className="bg-zinc-950 p-1 rounded-lg text-[9px]" />
-                      <button onClick={() => removeBreak(idx, bIdx)} className="text-red-500/50"><Trash2 size={12} /></button>
-                    </div>
-                  ))}
+               <div className="mt-5 pt-5 border-t border-white/5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest">Postavke pauza</span>
+                    <button onClick={() => addBreak(idx)} className="text-[9px] font-black text-[#D4AF37] uppercase tracking-widest flex items-center gap-1 bg-[#D4AF37]/5 px-3 py-1.5 rounded-full border border-[#D4AF37]/10 active:scale-95 transition-all">
+                      <Plus size={12} /> Dodaj pauzu
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {wh.breaks?.map((b, bIdx) => (
+                      <div key={bIdx} className="flex gap-3 items-center animate-lux-fade bg-black/40 p-3 rounded-2xl border border-white/5">
+                        <Clock size={12} className="text-zinc-700" />
+                        <div className="flex-1 flex gap-2">
+                           <input 
+                             type="time" 
+                             value={b.startTime} 
+                             onChange={e => updateBreakTime(idx, bIdx, 'startTime', e.target.value)}
+                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[10px] font-black text-zinc-400 w-full" 
+                           />
+                           <input 
+                             type="time" 
+                             value={b.endTime} 
+                             onChange={e => updateBreakTime(idx, bIdx, 'endTime', e.target.value)}
+                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[10px] font-black text-zinc-400 w-full" 
+                           />
+                        </div>
+                        <button onClick={() => removeBreak(idx, bIdx)} className="w-9 h-9 flex items-center justify-center bg-red-500/10 text-red-500 rounded-xl active:scale-90 transition-all">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {(!wh.breaks || wh.breaks.length === 0) && (
+                      <p className="text-center text-[8px] font-black text-zinc-800 uppercase tracking-[0.2em] py-2 italic">Nema definiranih pauza</p>
+                    )}
+                  </div>
                </div>
             )}
           </Card>
         ))}
       </div>
 
-      <Button onClick={handleSave} loading={loading} className="w-full h-18 text-xs font-black shadow-2xl">Spremi raspored</Button>
+      <div className="px-1 pt-6">
+        <Button onClick={handleSave} loading={loading} className="w-full h-20 text-xs font-black shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
+          Spremi Raspored Termina
+        </Button>
+      </div>
     </div>
   );
 };
