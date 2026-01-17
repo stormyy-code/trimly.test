@@ -35,7 +35,7 @@ export interface BarberProfile {
   userId: string;
   fullName: string;
   profilePicture: string;
-  phoneNumber?: string;
+  phone_number?: string;
   neighborhood: string;
   address: string;
   zipCode?: string;
@@ -67,6 +67,7 @@ export type BookingStatus = 'pending' | 'accepted' | 'rejected' | 'completed';
 export interface Booking {
   id: string;
   customerId: string;
+  customerName: string;
   customerEmail: string;
   barberId: string;
   serviceId: string;
@@ -83,6 +84,7 @@ export interface Review {
   bookingId: string;
   barberId: string;
   customerId: string;
+  customerName: string;
   customerEmail: string;
   rating: number;
   comment: string;

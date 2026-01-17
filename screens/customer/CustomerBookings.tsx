@@ -2,21 +2,20 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../store/database';
 import { supabase } from '../../store/supabase';
-import { Booking, Review } from '../../types';
+import { Booking, Review, User } from '../../types';
 import { Card, Badge, Button, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Calendar, Clock, Star, RefreshCw, BellRing, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, Star, RefreshCw, BellRing, Trash2, Loader2, AlertTriangle, X } from 'lucide-react';
 
 // Globalni Set za cijelo vrijeme trajanja aplikacije. 
-// Ovo sprečava "uskrsnuće" termina čak i ako komponenta unmounta i remounta.
 const sessionDeletedIds = new Set<string>();
 
 interface CustomerBookingsProps {
-  customerId: string;
+  user: User;
   lang: Language;
 }
 
-const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang }) => {
+const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [feedbackBooking, setFeedbackBooking] = useState<Booking | null>(null);
   const [rating, setRating] = useState(5);
@@ -31,8 +30,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
   const fetchBookings = async (force = false) => {
     if (force) setLoading(true);
     try {
-      const all = await db.getBookings(customerId, 'customer');
-      // Filtriraj podatke s poslužitelja pomoću sessionDeletedIds
+      const all = await db.getBookings(user.id, 'customer');
       const filtered = (all || []).filter(b => !sessionDeletedIds.has(b.id));
       setBookings(filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     } catch (err) {
@@ -46,17 +44,16 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
     fetchBookings(true);
     
     const channel = supabase
-      .channel(`customer-bookings-${customerId}`)
+      .channel(`customer-bookings-${user.id}`)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'bookings', 
-        filter: `customerId=eq.${customerId}` 
+        filter: `customerId=eq.${user.id}` 
       }, (payload) => {
         if (payload.eventType === 'DELETE') {
           setBookings(prev => prev.filter(b => b.id !== payload.old.id));
         } else if (payload.new && !sessionDeletedIds.has(payload.new.id)) {
-          // Samo ako termin NIJE na crnoj listi, osvježi listu
           fetchBookings();
         }
       })
@@ -65,7 +62,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
     return () => { 
       supabase.removeChannel(channel); 
     };
-  }, [customerId]);
+  }, [user.id]);
 
   const reviews = db.getReviewsSync();
   const hasReview = (bookingId: string) => reviews.some(r => r.bookingId === bookingId);
@@ -83,43 +80,47 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
     setActionLoading(id);
     try {
       const result = await db.deleteBooking(id);
-      
       if (result.success) {
-        // 1. Dodaj u globalnu crnu listu (ostaje aktivna dok se app ne osvježi)
         sessionDeletedIds.add(id);
-
-        // 2. Makni iz lokalnog stanja odmah (Optimistic UI)
         setBookings(prev => prev.filter(b => b.id !== id));
-        
-        // 3. Očisti cache u localStorage odmah
-        const cached = localStorage.getItem('trimly_bookings_cache');
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached) as Booking[];
-            const updated = parsed.filter(b => b.id !== id);
-            localStorage.setItem('trimly_bookings_cache', JSON.stringify(updated));
-          } catch (e) {}
-        }
-
-        setToast({ 
-          msg: lang === 'hr' ? 'Termin uspješno otkazan.' : 'Booking cancelled.', 
-          type: 'success' 
-        });
-      } else {
-        setToast({ 
-          msg: lang === 'hr' ? `Greška pri brisanju.` : `Error during deletion.`, 
-          type: 'error' 
-        });
+        setToast({ msg: lang === 'hr' ? 'Termin otkazan.' : 'Booking cancelled.', type: 'success' });
       }
     } catch (err) {
-      setToast({ 
-        msg: lang === 'hr' ? 'Sistemska greška.' : 'System error.', 
-        type: 'error' 
-      });
+      setToast({ msg: 'Greška pri otkazivanju.', type: 'error' });
     } finally {
       setActionLoading(null);
       setConfirmCancelId(null);
     }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackBooking) return;
+    setActionLoading(feedbackBooking.id);
+    
+    const newReview: Review = {
+      id: crypto.randomUUID(),
+      bookingId: feedbackBooking.id,
+      barberId: feedbackBooking.barberId,
+      customerId: user.id,
+      customerName: user.fullName || user.email.split('@')[0],
+      customerEmail: feedbackBooking.customerEmail,
+      rating,
+      comment,
+      createdAt: new Date().toISOString()
+    };
+
+    const success = await db.createReview(newReview);
+    if (success) {
+      setToast({ msg: t.done, type: 'success' });
+      await db.getReviews();
+      setFeedbackBooking(null);
+      setComment('');
+      setRating(5);
+      fetchBookings();
+    } else {
+      setToast({ msg: 'Greška pri spremanju recenzije.', type: 'error' });
+    }
+    setActionLoading(null);
   };
 
   const getStatusVariant = (status: string) => {
@@ -205,6 +206,14 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
                          )}
                        </button>
                     )}
+                    {isCompleted && !reviewed && (
+                      <button 
+                        onClick={() => setFeedbackBooking(booking)}
+                        className="text-[8px] font-black uppercase tracking-widest px-3 py-2 bg-[#D4AF37] text-black rounded-lg mt-2"
+                      >
+                        Ocijeni
+                      </button>
+                    )}
                   </div>
                 </div>
                 
@@ -231,6 +240,31 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ customerId, lang })
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {feedbackBooking && (
+        <div className="fixed inset-0 z-[500] flex items-end justify-center px-6 pb-12 animate-lux-fade">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setFeedbackBooking(null)}></div>
+          <Card className="relative w-full max-w-sm bg-[#0F0F0F] border border-[#C5A059]/30 rounded-[3rem] p-10 space-y-10 shadow-[0_50px_100px_rgba(0,0,0,1)]">
+            <button onClick={() => setFeedbackBooking(null)} className="absolute top-6 right-8 text-zinc-600"><X size={24} /></button>
+            <div className="text-center space-y-2">
+              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Ocjena šišanja</h3>
+              <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest">Podijelite svoje iskustvo</p>
+            </div>
+            <div className="flex justify-center gap-3">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button key={star} onClick={() => setRating(star)} className="transition-all active:scale-90">
+                  <Star size={32} className={`transition-all ${star <= rating ? 'text-[#C5A059] fill-[#C5A059]' : 'text-zinc-800'}`} />
+                </button>
+              ))}
+            </div>
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Komentar..." className="w-full bg-black rounded-2xl border border-white/5 p-5 text-xs text-zinc-400 min-h-[100px] outline-none focus:border-[#C5A059]/40" />
+            <div className="flex flex-col gap-3">
+               <Button onClick={handleSubmitFeedback} className="w-full h-18 text-xs font-black uppercase tracking-widest" loading={actionLoading === feedbackBooking.id}>Spremi ocjenu</Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

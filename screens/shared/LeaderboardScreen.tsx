@@ -4,16 +4,18 @@ import { db } from '../../store/database';
 import { Card } from '../../components/UI';
 import { translations, Language } from '../../translations';
 import { User } from '../../types';
-import { Trophy, Crown, Star, Loader2, ChevronRight } from 'lucide-react';
+import { Trophy, Crown, Star, Loader2, ChevronRight, Scissors, TrendingUp } from 'lucide-react';
 
 interface LeaderboardScreenProps {
   lang: Language;
   onSelectBarber?: (id: string) => void;
 }
 
+type SortBy = 'rating' | 'cuts';
+
 const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBarber }) => {
   const [loading, setLoading] = useState(false);
-  // Inicijaliziraj iz cache-a odmah da izbjegnemo flicker starog stanja
+  const [sortBy, setSortBy] = useState<SortBy>('rating');
   const [users, setUsers] = useState<User[]>(db.getUsersSync());
   const [tick, setTick] = useState(0);
   const t = translations[lang];
@@ -23,7 +25,6 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
     try {
       const uRes = await db.getUsers();
       setUsers(uRes);
-      // Osvježi i ostalo
       await Promise.all([
         db.getReviews(),
         db.getBookings(),
@@ -55,7 +56,6 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
     const all = db.getBarbersSync();
     return all.filter(b => {
       const u = users.find(user => user.id === b.userId);
-      // STROGO: Barber se prikazuje samo ako profil postoji i banned je EKSPLICITNO false/undefined
       return b.approved === true && u && u.banned !== true;
     });
   }, [users, tick]);
@@ -76,24 +76,48 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
         reviewCount: bReviews.length
       };
     }).sort((a, b) => {
-      if (parseFloat(b.rating) !== parseFloat(a.rating)) {
+      if (sortBy === 'rating') {
+        if (parseFloat(b.rating) !== parseFloat(a.rating)) {
+          return parseFloat(b.rating) - parseFloat(a.rating);
+        }
+        return b.cutCount - a.cutCount;
+      } else {
+        if (b.cutCount !== a.cutCount) {
+          return b.cutCount - a.cutCount;
+        }
         return parseFloat(b.rating) - parseFloat(a.rating);
       }
-      return b.cutCount - a.cutCount;
     });
-  }, [rawBarbers, bookings, reviews]);
+  }, [rawBarbers, bookings, reviews, sortBy]);
 
   return (
     <div className="space-y-8 animate-slide-up pb-32 bg-black min-h-screen">
-      <div className="premium-blur bg-[#D4AF37]/5 rounded-[3rem] p-10 border border-[#D4AF37]/20 flex flex-col items-center gap-6 mt-4">
+      <div className="premium-blur bg-[#D4AF37]/5 rounded-[3rem] p-10 border border-[#D4AF37]/20 flex flex-col items-center gap-6 mt-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+           <TrendingUp size={80} />
+        </div>
         <div className="w-16 h-16 bg-[#D4AF37] rounded-[1.75rem] flex items-center justify-center text-black shadow-[0_15px_45px_rgba(212,175,55,0.4)]">
           <Trophy size={32} />
         </div>
         <div className="text-center">
           <p className="text-[11px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mb-2">Network Elite</p>
           <h2 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">{t.ranks}</h2>
-          <p className="text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em] mt-3">Samo stvarni rezultati barbera</p>
         </div>
+      </div>
+
+      <div className="flex bg-zinc-950 p-1.5 rounded-3xl border border-white/5 mx-2">
+        <button 
+          onClick={() => setSortBy('rating')} 
+          className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${sortBy === 'rating' ? 'bg-[#D4AF37] text-black shadow-xl' : 'text-zinc-600'}`}
+        >
+          <Star size={14} className={sortBy === 'rating' ? 'fill-black' : ''} /> Najbolje ocijenjeni
+        </button>
+        <button 
+          onClick={() => setSortBy('cuts')} 
+          className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${sortBy === 'cuts' ? 'bg-[#D4AF37] text-black shadow-xl' : 'text-zinc-600'}`}
+        >
+          <Scissors size={14} /> Najviše šišanja
+        </button>
       </div>
 
       <section className="space-y-4 px-2">
@@ -139,15 +163,15 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ lang, onSelectBar
                 </h3>
                 
                 <div className="flex items-center gap-4">
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border w-fit ${hasReviews ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30' : 'bg-white/5 border-white/10'}`}>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border w-fit ${sortBy === 'rating' ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30' : 'bg-white/5 border-white/10'}`}>
                     <Star size={12} className={`${hasReviews ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-700'}`} />
                     <span className={`text-xs font-black ${hasReviews ? 'text-white' : 'text-zinc-700'}`}>
                       {hasReviews ? barber.rating : 'Novo'}
                     </span>
                   </div>
 
-                  <div className="flex flex-col">
-                    <span className="text-white text-[10px] font-black leading-none">{barber.cutCount}</span>
+                  <div className={`flex flex-col px-3 py-1 rounded-xl border ${sortBy === 'cuts' ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30' : 'bg-white/5 border-white/10'}`}>
+                    <span className={`text-[10px] font-black leading-none ${sortBy === 'cuts' ? 'text-white' : 'text-zinc-500'}`}>{barber.cutCount}</span>
                     <span className="text-zinc-600 text-[7px] font-black uppercase tracking-widest">Šišanja</span>
                   </div>
                 </div>

@@ -5,7 +5,7 @@ import { StorageService } from '../../services/StorageService';
 import { User } from '../../types';
 import { Card, Button, Toast, Input } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, LogOut } from 'lucide-react';
+import { User as UserIcon, Camera, Loader2, Edit3, Lock, ShieldCheck, FileText, Sparkles, LogOut, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../store/supabase';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
@@ -29,6 +29,8 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = translations[lang];
@@ -109,6 +111,24 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       setToastMsg({ msg: err.message || 'Greška', type: 'error' });
     } finally {
       setPassLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    try {
+      const success = await db.deleteAccount(user.id);
+      if (success) {
+        await supabase.auth.signOut();
+        onLogout();
+      } else {
+        setToastMsg({ msg: 'Greška pri brisanju računa.', type: 'error' });
+      }
+    } catch (err) {
+      setToastMsg({ msg: 'Došlo je do greške.', type: 'error' });
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -216,11 +236,49 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         </Card>
       </section>
 
+      <section className="space-y-4 px-1 pt-4">
+        <div className="flex items-center gap-3 ml-4">
+           <Trash2 size={12} className="text-red-500" />
+           <p className="text-[10px] font-black text-red-500/60 uppercase tracking-widest">{t.dangerZone}</p>
+        </div>
+        <Card className="p-6 bg-red-500/5 border-red-500/10">
+          <button 
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[9px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500/20 transition-all flex items-center justify-center gap-3"
+          >
+            <Trash2 size={14} /> {t.deleteAccount}
+          </button>
+        </Card>
+      </section>
+
       <div className="pt-6 px-1">
-        <Button variant="danger" className="w-full h-20 text-[11px] font-black tracking-widest" onClick={onLogout}>
+        <Button variant="danger" className="w-full h-20 text-[11px] font-black tracking-widest shadow-2xl" onClick={onLogout}>
           <LogOut size={16} className="mr-3" /> {lang === 'hr' ? 'ODJAVI SE IZ MREŽE' : 'LOGOUT NETWORK'}
         </Button>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center px-6 animate-lux-fade">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !deleteLoading && setShowDeleteConfirm(false)}></div>
+          <Card className="relative w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-[3rem] p-10 space-y-8 flex flex-col items-center text-center shadow-[0_50px_100px_rgba(0,0,0,1)]">
+            <AlertTriangle size={48} className="text-red-500" />
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">{t.confirmDeleteAccount}</h3>
+              <p className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest leading-loose">Svi vaši podaci i rezervacije bit će trajno izbrisani iz Zagrebačke mreže.</p>
+            </div>
+            <div className="flex flex-col w-full gap-3">
+              <Button variant="danger" className="h-16 w-full" onClick={handleDeleteAccount} loading={deleteLoading}>Da, obriši račun</Button>
+              <button 
+                disabled={deleteLoading}
+                className="h-16 w-full text-zinc-500 text-[10px] font-black uppercase tracking-widest" 
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Odustani
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <LegalModal isOpen={isLegalOpen} onClose={() => setIsLegalOpen(false)} lang={lang} />
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} lang={lang} />

@@ -242,7 +242,7 @@ const App: React.FC = () => {
       switch (activeTab) {
         case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'bookings': return <CustomerBookings lang={lang} customerId={user.id} />;
+        case 'bookings': return <CustomerBookings lang={lang} user={user} />;
         case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} onRoleUpdate={() => {}} />;
         default: return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
       }

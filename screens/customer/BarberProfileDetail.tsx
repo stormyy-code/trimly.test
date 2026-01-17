@@ -4,7 +4,7 @@ import { db } from '../../store/database';
 import { Service, Booking, User, WorkingDay } from '../../types';
 import { Button, Card, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -24,7 +24,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [step, setStep] = useState<'details' | 'success'>('details');
-  const [activeTab, setActiveTab] = useState<'info' | 'services'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'services' | 'reviews'>('info');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
 
@@ -45,9 +45,10 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const barberBookings = db.getBookingsSync().filter(b => b.barberId === barberId);
   
   const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
-  const avgRating = reviews.length 
-    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) 
-    : "0.0";
+  const avgRatingValue = reviews.length 
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)
+    : 0;
+  const avgRating = avgRatingValue.toFixed(1);
 
   const timeSlots = useMemo(() => {
     if (!selectedDate || !barber) return [];
@@ -61,10 +62,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     const slots: { time: string; isTaken: boolean }[] = [];
     const interval = barber.slotInterval || 45;
     
-    const activeOnDate = barberBookings.filter(b => 
-      b.date === selectedDate && (b.status === 'accepted' || b.status === 'pending')
+    // KLJUČNA PROMJENA: Samo 'accepted' termini blokiraju slot.
+    // Više ljudi može poslati 'pending' zahtjev za isti termin.
+    const acceptedOnDate = barberBookings.filter(b => 
+      b.date === selectedDate && b.status === 'accepted'
     );
-    const takenTimes = activeOnDate.map(b => b.time);
+    const takenTimes = acceptedOnDate.map(b => b.time);
 
     const breaks = dayConfig.breaks || [];
 
@@ -136,6 +139,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
       const newBooking: Booking = {
         id: generateId(),
         customerId: user.id,
+        customerName: user.fullName || user.email.split('@')[0],
         customerEmail: user.email,
         barberId: barber.id,
         serviceId: selectedService.id,
@@ -207,8 +211,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           <ArrowLeft size={18} />
         </button>
         <div className="flex gap-2">
-           {barber.phoneNumber && (
-             <a href={`tel:${barber.phoneNumber}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-all">
+           {barber.phone_number && (
+             <a href={`tel:${barber.phone_number}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-all">
                <Phone size={16} className="text-black" />
              </a>
            )}
@@ -255,6 +259,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         <div className="flex bg-zinc-950 p-1.5 rounded-3xl border border-white/5">
            <button onClick={() => setActiveTab('info')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'info' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Info</button>
            <button onClick={() => setActiveTab('services')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'services' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Usluge</button>
+           <button onClick={() => setActiveTab('reviews')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'reviews' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Recenzije</button>
         </div>
 
         {activeTab === 'info' ? (
@@ -275,7 +280,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                 <p className="text-zinc-400 leading-relaxed italic text-xs font-bold px-6 py-5 bg-zinc-950 rounded-3xl border border-white/5">{barber.bio || 'Barber nije dodao opis.'}</p>
              </section>
           </div>
-        ) : (
+        ) : activeTab === 'services' ? (
           <div className="space-y-4 animate-lux-fade pb-20">
             {services.length === 0 ? (
                <div className="py-20 text-center opacity-30 italic text-xs">Ovaj barber još nije dodao usluge.</div>
@@ -294,6 +299,46 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                 <ChevronRight size={20} className={selectedService?.id === s.id ? 'text-[#D4AF37]' : 'text-zinc-800'} />
               </Card>
             ))}
+          </div>
+        ) : (
+          <div className="space-y-6 animate-lux-fade pb-20">
+             {reviews.length === 0 ? (
+               <div className="py-24 text-center space-y-4 opacity-20 flex flex-col items-center">
+                  <MessageSquare size={40} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] italic">Ovaj barber još nema recenzija.</p>
+               </div>
+             ) : (
+               <div className="space-y-4">
+                 <div className="flex items-center justify-between px-2 mb-4">
+                    <div className="flex flex-col">
+                       <span className="text-3xl font-black text-white italic">{avgRating}</span>
+                       <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Prosječna ocjena</span>
+                    </div>
+                    <div className="text-right">
+                       <span className="text-lg font-black text-[#D4AF37] italic">{reviews.length}</span>
+                       <span className="block text-[8px] font-black text-zinc-600 uppercase tracking-widest">Ukupno recenzija</span>
+                    </div>
+                 </div>
+                 {reviews.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(review => (
+                    <Card key={review.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-4">
+                       <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                             <span className="text-xs font-black text-white italic uppercase tracking-tight">{review.customerName || review.customerEmail.split('@')[0]}</span>
+                             <span className="text-[8px] text-zinc-700 font-black uppercase tracking-widest mt-1">{new Date(review.createdAt).toLocaleDateString()}</span>
+                          </div>
+                          <div className="flex gap-0.5">
+                             {[1,2,3,4,5].map(star => (
+                               <Star key={star} size={10} className={star <= review.rating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'} />
+                             ))}
+                          </div>
+                       </div>
+                       <p className="text-zinc-400 text-xs leading-relaxed italic font-medium px-4 py-3 bg-black/40 rounded-2xl border border-white/[0.03]">
+                         "{review.comment || 'Nema komentara.'}"
+                       </p>
+                    </Card>
+                 ))}
+               </div>
+             )}
           </div>
         )}
       </div>

@@ -37,6 +37,10 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   useEffect(() => {
     const handleSync = () => setRefreshTrigger(prev => prev + 1);
     window.addEventListener('app-sync-complete', handleSync);
+    
+    // Eksplicitni fetch pri učitavanju za svježe podatke
+    db.getBookings(barberId, 'barber');
+
     const channel = supabase
       .channel('barber-bookings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barberId=eq.${barberId}` }, () => {
@@ -75,8 +79,28 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
   const updateStatus = async (bookingId: string, status: Booking['status']) => {
     setIsUpdating(bookingId);
+    
+    // Pronađi ovaj booking da znamo datum i vrijeme
+    const currentBooking = db.getBookingsSync().find(b => b.id === bookingId);
+    
     const success = await db.updateBookingStatus(bookingId, status);
+    
     if (success) {
+      // Ako smo prihvatili termin, automatski odbijamo ostale klijente koji čekaju za ISTI termin
+      if (status === 'accepted' && currentBooking) {
+        const othersToReject = db.getBookingsSync().filter(b => 
+          b.id !== bookingId &&
+          b.barberId === barberId &&
+          b.date === currentBooking.date &&
+          b.time === currentBooking.time &&
+          b.status === 'pending'
+        );
+
+        for (const b of othersToReject) {
+          await db.updateBookingStatus(b.id, 'rejected');
+        }
+      }
+
       await db.getBookings(barberId, 'barber');
       setRefreshTrigger(prev => prev + 1);
     }
@@ -96,7 +120,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
             <UserIcon size={24} />
           </div>
           <div className="min-w-0">
-            <h3 className="font-black text-sm text-white uppercase italic tracking-tighter leading-none truncate">{booking.customerEmail.split('@')[0]}</h3>
+            <h3 className="font-black text-sm text-white uppercase italic tracking-tighter leading-none truncate">{booking.customerName || booking.customerEmail.split('@')[0]}</h3>
             <p className="text-[8px] text-zinc-600 font-black uppercase tracking-[0.2em] mt-2 truncate">{booking.serviceName}</p>
           </div>
         </div>
