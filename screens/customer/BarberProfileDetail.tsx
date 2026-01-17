@@ -62,8 +62,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     const slots: { time: string; isTaken: boolean }[] = [];
     const interval = barber.slotInterval || 45;
     
-    // KLJUČNA PROMJENA: Samo 'accepted' termini blokiraju slot.
-    // Više ljudi može poslati 'pending' zahtjev za isti termin.
     const acceptedOnDate = barberBookings.filter(b => 
       b.date === selectedDate && b.status === 'accepted'
     );
@@ -205,14 +203,13 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {/* Sticky Header */}
       <div className="sticky top-0 left-0 right-0 z-50 bg-black/90 premium-blur border-b border-white/5 px-6 py-4 flex justify-between items-center pt-safe">
         <button onClick={onBack} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-400 active:scale-90 transition-all border border-white/5">
           <ArrowLeft size={18} />
         </button>
         <div className="flex gap-2">
-           {barber.phone_number && (
-             <a href={`tel:${barber.phone_number}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-all">
+           {barber.phoneNumber && (
+             <a href={`tel:${barber.phoneNumber}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl active:scale-90 transition-all">
                <Phone size={16} className="text-black" />
              </a>
            )}
@@ -343,7 +340,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         )}
       </div>
 
-      {/* Booking Drawer */}
       {selectedService && (
         <div className="fixed bottom-0 left-0 right-0 bg-black/95 border-t border-white/10 p-8 z-[150] rounded-t-[3.5rem] shadow-2xl animate-slide-up space-y-8 premium-blur pb-safe max-w-2xl mx-auto">
           <button 

@@ -35,7 +35,7 @@ export interface BarberProfile {
   userId: string;
   fullName: string;
   profilePicture: string;
-  phone_number?: string;
+  phoneNumber?: string;
   neighborhood: string;
   address: string;
   zipCode?: string;
