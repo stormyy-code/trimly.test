@@ -6,7 +6,7 @@ import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast } from '../../components/UI';
-import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, LogOut } from 'lucide-react';
+import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, LogOut, AlertCircle } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 
@@ -34,6 +34,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [gallery, setGallery] = useState<string[]>([]);
 
   const [toastMsg, setToastMsg] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
   
@@ -105,6 +106,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     }
     
     setIsLoading(true);
+    setSaveError(null);
     try {
       const barbers = await db.getBarbers();
       const existing = barbers.find(b => b.userId === userId);
@@ -136,9 +138,12 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         setToastMsg({ msg: t.done, type: 'success' });
         setTimeout(onComplete, 1200);
       } else {
-        setToastMsg({ msg: `Greška: ${result.error}`, type: 'error' });
+        const errorDetail = result.error || 'Nepoznata greška baze podataka.';
+        setSaveError(errorDetail);
+        setToastMsg({ msg: 'Spremanje nije uspjelo.', type: 'error' });
       }
     } catch (err: any) {
+      setSaveError(err.message || 'Kritična sistemska greška.');
       setToastMsg({ msg: 'Sistemska greška pri spremanju.', type: 'error' });
     } finally {
       setIsLoading(false);
@@ -167,6 +172,16 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       </div>
 
       <div className="space-y-8 px-6">
+        {saveError && (
+          <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-2">
+             <div className="flex items-center gap-3 text-red-500 font-black uppercase text-[9px] tracking-widest">
+               <AlertCircle size={14} /> Problem s bazom podataka
+             </div>
+             <p className="text-zinc-400 text-[10px] italic leading-tight">{saveError}</p>
+             <p className="text-zinc-600 text-[8px] uppercase font-black mt-2">Savjet: Provjerite RLS polise u Supabase SQL Editoru.</p>
+          </div>
+        )}
+
         <Input label="Puno Ime" value={fullName} onChange={setFullName} />
         <Input label="Mobitel" value={phoneNumber} onChange={setPhoneNumber} />
         <Input label="Kvart" value={neighborhood} onChange={setNeighborhood} />

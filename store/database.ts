@@ -3,7 +3,6 @@ import { supabase } from './supabase';
 import { User, BarberProfile, Service, Booking, Review } from '../types';
 
 let _usersRegistry: User[] = [];
-const _recentBanLocks = new Map<string, boolean>();
 
 // Pomoćna funkcija za mapiranje iz baze (snake_case) u aplikaciju (camelCase)
 const mapBarberFromDb = (b: any): BarberProfile => ({
@@ -137,13 +136,21 @@ export const db = {
   saveBarbers: async (barber: Partial<BarberProfile>) => {
     try {
       const dbData = mapBarberToDb(barber);
+      // Osiguravamo da imamo user_id jer je on ključan za RLS polise i OnConflict
+      if (!dbData.user_id) throw new Error("Missing user_id for barber profile.");
+
       const { error } = await supabase.from('barbers').upsert(dbData, { onConflict: 'user_id' });
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Supabase Save Error:", error);
+        return { success: false, error: error.message };
+      }
+      
       await db.getBarbers(); 
       return { success: true };
     } catch (err: any) {
-      console.error("DB SAVE ERROR:", err);
-      return { success: false, error: err.message };
+      console.error("DB SAVE EXCEPTION:", err);
+      return { success: false, error: err.message || "Unknown database error" };
     }
   },
 
