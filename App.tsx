@@ -15,6 +15,7 @@ import CustomerProfile from './screens/customer/CustomerProfile';
 import BarberDashboard from './screens/barber/BarberDashboard';
 import BarberServices from './screens/barber/BarberServices';
 import BarberProfileForm from './screens/barber/BarberProfileForm';
+import BarberWaitingRoom from './screens/barber/BarberWaitingRoom';
 import BarberAvailability from './screens/barber/BarberAvailability';
 import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminBarbers from './screens/admin/AdminBarbers';
@@ -55,8 +56,9 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser) => {
+  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser | {id: string, email: string}) => {
     try {
+      // Re-fetch profile to ensure role is correct
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -93,14 +95,13 @@ const App: React.FC = () => {
       syncAllData(fullUser.id, finalRole);
 
       if (finalRole === 'barber') {
-        db.getBarbers().then(barbers => {
-          const bProf = (barbers || []).find(b => b.userId === fullUser.id);
-          setBarberProfile(bProf || null);
-        });
+        const barbers = await db.getBarbers();
+        const bProf = (barbers || []).find(b => b.userId === fullUser.id);
+        setBarberProfile(bProf || null);
       }
     } catch (err: any) {
       console.error("Auth handler error:", err);
-      setUser({ id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' as UserRole });
+      setUser({ id: supabaseUser.id, email: (supabaseUser as any).email || '', role: 'customer' as UserRole });
     } finally {
       setIsInitializing(false);
     }
@@ -121,7 +122,6 @@ const App: React.FC = () => {
   useEffect(() => {
     let mounted = true;
 
-    // Prva provjera: Ako URL sadrži recovery token
     const hash = window.location.hash;
     if (hash && hash.includes('type=recovery')) {
       setIsRecoveringPassword(true);
@@ -131,8 +131,6 @@ const App: React.FC = () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && mounted) {
-          // Ako smo u recovery modu, nemoj automatski povlačiti profil kao logged-in, 
-          // jer recovery session ima ograničena prava dok se lozinka ne promijeni.
           if (!isRecoveringPassword) {
             await handleAuthUser(session.user);
           } else {
@@ -155,7 +153,6 @@ const App: React.FC = () => {
         setIsRecoveringPassword(true);
         setIsInitializing(false);
       } else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        // Ako smo usred recovery-ja, USER_UPDATED će se desiti nakon promjene lozinke
         if (!isRecoveringPassword) {
           handleAuthUser(session.user);
         }
@@ -197,8 +194,20 @@ const App: React.FC = () => {
     setIsRecoveringPassword(false);
     setActiveTab('home');
     setIsInitializing(false);
-    // Očisti hash iz URL-a
     window.location.hash = '';
+  };
+
+  const handleRefreshStatus = async () => {
+    if (user && user.role === 'barber') {
+      const barbers = await db.getBarbers();
+      const bProf = (barbers || []).find(b => b.userId === user.id);
+      setBarberProfile(bProf || null);
+      if (bProf?.approved) {
+        setToast({ message: lang === 'hr' ? 'Profil odobren!' : 'Profile approved!', type: 'success' });
+      } else {
+        setToast({ message: lang === 'hr' ? 'Još uvijek na čekanju...' : 'Still waiting...', type: 'error' });
+      }
+    }
   };
 
   if (isInitializing) {
@@ -215,7 +224,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Ako detektiramo recovery mod iz URL-a ili eventa
   if (isRecoveringPassword) {
     return (
       <ChangePasswordScreen 
@@ -223,7 +231,7 @@ const App: React.FC = () => {
         onComplete={() => {
           setIsRecoveringPassword(false);
           setToast({ message: t.passwordUpdated, type: 'success' });
-          handleLogout(); // Odjava nakon uspješne promjene
+          handleLogout();
         }} 
       />
     );
@@ -249,7 +257,17 @@ const App: React.FC = () => {
     }
 
     if (user.role === 'barber') {
-      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+      // Ako barber još nije ispunio formu, prikaži mu formu
+      if (!barberProfile) {
+        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+      }
+      
+      // Ako je ispunio, ali NIJE odobren, prikaži mu Waiting Room
+      if (!barberProfile.approved) {
+        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={handleRefreshStatus} />;
+      }
+
+      // Ako je odobren, pusti ga u Dashboard
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
@@ -279,6 +297,8 @@ const App: React.FC = () => {
     return null;
   };
 
+  const isBarberUnapproved = user?.role === 'barber' && barberProfile && !barberProfile.approved;
+
   return (
     <div className="h-full w-full bg-black">
       {user ? (
@@ -288,7 +308,7 @@ const App: React.FC = () => {
           onTabChange={setActiveTab} 
           onLogout={handleLogout}
           lang={lang}
-          hideShell={!!selectedBarberId} 
+          hideShell={!!selectedBarberId || isBarberUnapproved} 
           title={user.role === 'admin' ? 'Network Command' : user.role === 'barber' ? 'Barber Hub' : 'Trimly Zagreb'}
         >
           {renderView()}

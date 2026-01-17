@@ -6,10 +6,10 @@ import { User, UserRole } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { Button, Input, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, User as UserIcon, Scissors, ShieldCheck, Mail, AlertCircle, CheckCircle2, Zap } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Scissors, ShieldCheck, Mail, AlertCircle, CheckCircle2, Zap, Info } from 'lucide-react';
 
 interface RegisterScreenProps {
-  onLogin: (user: User) => void;
+  onLogin: (user: any) => void;
   onToggle: () => void;
   lang: Language;
   setLang: (l: Language) => void;
@@ -29,15 +29,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
   const t = translations[lang];
 
   const createProfileRecord = async (userId: string, userEmail: string, userRole: UserRole) => {
-    const dbRole = userRole === 'customer' ? 'customer' : userRole;
-    
+    // Spremanje profila u bazu odmah nakon registracije
     const { error: profileError } = await supabase.from('profiles').insert([{ 
       id: userId, 
       email: userEmail, 
-      role: dbRole 
+      role: userRole 
     }]);
 
-    if (profileError) throw profileError;
+    if (profileError) {
+       console.error("Profile creation failed:", profileError);
+       // Ako profil već postoji (npr. ponovna registracija), pokušavamo update
+       await supabase.from('profiles').update({ role: userRole }).eq('id', userId);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -46,26 +49,26 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
     setLoading(true);
 
     if (role === 'barber' && inviteCode !== BARBER_INVITE_CODE) {
-      setError(lang === 'hr' ? 'Pogrešan barber kod' : 'Wrong barber code');
+      setError(lang === 'hr' ? 'Pogrešan barber kôd. Kontaktirajte Admina.' : 'Invalid barber code. Contact Admin.');
       setLoading(false);
       return;
     }
 
     try {
       const { data, error: authError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
       });
 
       if (authError) throw authError;
 
       if (data.user) {
+        // Ako je email potvrda isključena u Supabase-u, data.session će postojati odmah
         if (data.session) {
           await createProfileRecord(data.user.id, email, role);
-          const fullUser = { id: data.user.id, email, role } as User;
-          db.setActiveUser(fullUser);
-          onLogin(fullUser);
+          onLogin(data.user);
         } else {
+          // Ako je email potvrda uključena, idemo na OTP ekran
           setStep('verify');
         }
       }
@@ -83,7 +86,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
 
     try {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email,
+        email: email.trim(),
         token: otp,
         type: 'signup'
       });
@@ -92,10 +95,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
       if (!data.user) throw new Error("Verifikacija nije uspjela");
 
       await createProfileRecord(data.user.id, email, role);
-
-      const fullUser = { id: data.user.id, email, role } as User;
-      db.setActiveUser(fullUser);
-      onLogin(fullUser);
+      onLogin(data.user);
 
     } catch (err: any) {
       setError(err.message || "Greška pri verifikaciji");
@@ -167,10 +167,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
            <Input label={t.password} type="password" placeholder="••••••••" value={password} onChange={setPassword} required />
            
            {role === 'barber' && (
-             <Input label={t.barberCode} placeholder="••••••••" value={inviteCode} onChange={setInviteCode} required />
+             <div className="space-y-4">
+                <Input label={t.barberCode} placeholder="••••••••" value={inviteCode} onChange={setInviteCode} required />
+                <div className="flex items-center gap-3 px-5 py-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                   <Info size={14} className="text-blue-400 shrink-0" />
+                   <p className="text-[8px] font-black uppercase tracking-widest text-blue-400 leading-tight">
+                     Barber kôd je obavezan za ulazak u Zagreb Network. Kontaktirajte podršku za kôd.
+                   </p>
+                </div>
+             </div>
            )}
 
-           <div className="px-4 text-center">
+           <div className="px-4 text-center mt-4">
              <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest leading-loose">
                {t.legalAgreement} <a href="https://sites.google.com/view/trimly-privacy-policy/po%C4%8Detna-stranica" target="_blank" className="text-[#D4AF37] underline">{t.privacy}</a>
              </p>
