@@ -4,7 +4,8 @@ import { db } from '../../store/database';
 import { BarberProfile, User } from '../../types';
 import { Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Search, Trophy, Sparkles, Crown, MessageSquare, ArrowDownNarrowWide, SlidersHorizontal, Scissors, Star } from 'lucide-react';
+import { Search, Trophy, Sparkles, Crown, ArrowDownNarrowWide, SlidersHorizontal, Scissors, Star, Zap, Loader2 } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 
 interface CustomerHomeProps {
   onSelectBarber: (id: string) => void;
@@ -19,9 +20,30 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
   const [sortType, setSortType] = useState<SortType>('recommended');
   const [users, setUsers] = useState<User[]>([]);
   const [refresh, setRefresh] = useState(0);
+  const [aiTrend, setAiTrend] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const t = translations[lang];
   
+  const fetchAiTrend = async () => {
+    setAiLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Generate a very short, edgy, and premium barber trend tip for a user in Zagreb, Croatia. 
+        Focus on styles like Fade, Taper, or Buzz cut. Keep it under 15 words. 
+        Language: ${lang === 'hr' ? 'Croatian' : 'English'}.`,
+        config: { temperature: 0.8 }
+      });
+      setAiTrend(response.text);
+    } catch (e) {
+      setAiTrend(lang === 'hr' ? "Fade je uvijek u modi na zagrebačkim ulicama." : "Sharp fades are dominating the Zagreb streets today.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   useEffect(() => {
     const sync = async () => {
       const [uRes] = await Promise.allSettled([
@@ -36,6 +58,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
       setRefresh(prev => prev + 1);
     };
     sync();
+    fetchAiTrend();
   }, []);
 
   const barbers = useMemo(() => {
@@ -114,6 +137,26 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
               {t.explore} Professionals
             </h2>
           </div>
+        </div>
+
+        {/* AI TREND SECTION */}
+        <div className="px-1">
+          <Card className="p-6 bg-gradient-to-br from-[#D4AF37]/20 to-transparent border-[#D4AF37]/20 shadow-2xl relative overflow-hidden group active:scale-95 transition-all" onClick={fetchAiTrend}>
+            <div className="absolute -right-4 -top-4 opacity-5 group-hover:rotate-12 transition-all">
+               <Zap size={100} />
+            </div>
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-[#D4AF37] rounded-2xl flex items-center justify-center text-black shadow-xl shrink-0">
+                {aiLoading ? <Loader2 className="animate-spin" size={20} /> : <Zap size={20} />}
+              </div>
+              <div className="space-y-1 min-w-0">
+                <span className="text-[7px] font-black text-[#D4AF37] uppercase tracking-[0.3em]">Trimly AI Trends</span>
+                <p className="text-white text-[11px] font-black italic uppercase leading-tight tracking-tight">
+                  {aiLoading ? 'Generiram trendove...' : aiTrend}
+                </p>
+              </div>
+            </div>
+          </Card>
         </div>
 
         <div className="space-y-4 px-1">

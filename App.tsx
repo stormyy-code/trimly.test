@@ -113,6 +113,53 @@ const App: React.FC = () => {
     }
   }, [syncAllData]);
 
+  // Global Real-time Listeners for Bookings
+  useEffect(() => {
+    if (!user) return;
+
+    const column = user.role === 'customer' ? 'customer_id' : 'barber_id';
+    
+    const channel = supabase
+      .channel(`global-bookings-${user.id}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'bookings', 
+        filter: `${column}=eq.${user.id}` 
+      }, (payload) => {
+        const status = payload.new.status;
+        const oldStatus = payload.old.status;
+
+        if (status !== oldStatus) {
+           if (user.role === 'customer') {
+              if (status === 'accepted') setToast({ message: 'Termin prihvaćen! 🎉', type: 'success' });
+              if (status === 'rejected') setToast({ message: 'Nažalost, termin je odbijen.', type: 'error' });
+           } else {
+              if (status === 'pending') setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
+              if (status === 'cancelled') setToast({ message: 'Klijent je otkazao termin.', type: 'error' });
+           }
+           // Trigger sync to refresh UI
+           db.getBookings(user.id, user.role);
+        }
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'bookings',
+        filter: `${column}=eq.${user.id}`
+      }, (payload) => {
+        if (user.role === 'barber') {
+           setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
+           db.getBookings(user.id, user.role);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   useEffect(() => {
     const handleProfileUpdate = () => {
       const updated = db.getActiveUser();
@@ -284,7 +331,7 @@ const App: React.FC = () => {
       ) : (
         renderView()
       )}
-      {toast && <Toast message={toast.message} type={toast.message.includes('odobren') ? 'success' : toast.type} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
