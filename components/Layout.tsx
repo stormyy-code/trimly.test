@@ -16,7 +16,17 @@ interface LayoutProps {
   hideShell?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, role, activeTab, onTabChange, onLogout, title, lang, hideShell = false }) => {
+// Fix: Included 'onTabChange' in the destructured props
+const Layout: React.FC<LayoutProps> = ({ 
+  children, 
+  role, 
+  activeTab, 
+  onTabChange, 
+  onLogout, 
+  title, 
+  lang, 
+  hideShell = false 
+}) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string>(new Date().toLocaleTimeString());
   const [tick, setTick] = useState(0); 
@@ -28,6 +38,7 @@ const Layout: React.FC<LayoutProps> = ({ children, role, activeTab, onTabChange,
       if (!user) return false;
       const bookings = db.getBookingsSync().filter(b => b.customerId === user.id && b.status === 'completed');
       const reviews = db.getReviewsSync();
+      // Provjeri postoji li termin koji je završen, a nema recenziju
       return bookings.some(b => !reviews.some(r => r.bookingId === b.id));
     }
     
@@ -46,14 +57,18 @@ const Layout: React.FC<LayoutProps> = ({ children, role, activeTab, onTabChange,
       setTick(prev => prev + 1);
     };
 
+    const refreshTick = () => setTick(prev => prev + 1);
+
     window.addEventListener('app-sync-start', handleSync);
     window.addEventListener('app-sync-complete', handleSync);
     window.addEventListener('storage', handleSync);
+    window.addEventListener('reviews-updated', refreshTick);
     
     return () => {
       window.removeEventListener('app-sync-start', handleSync);
       window.removeEventListener('app-sync-complete', handleSync);
       window.removeEventListener('storage', handleSync);
+      window.removeEventListener('reviews-updated', refreshTick);
     };
   }, []);
 

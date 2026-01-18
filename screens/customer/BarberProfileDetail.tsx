@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../../store/database';
-import { Service, Booking, User, WorkingDay } from '../../types';
+import { Service, Booking, User, WorkingDay, Review } from '../../types';
 import { Button, Card, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
 import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare } from 'lucide-react';
@@ -27,9 +27,20 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const [activeTab, setActiveTab] = useState<'info' | 'services' | 'reviews'>('info');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [allUsers, setAllUsers] = useState<User[]>(db.getUsersSync());
 
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
+
+  useEffect(() => {
+    db.getUsers().then(setAllUsers);
+    
+    const handleRegistryUpdate = (e: any) => {
+      setAllUsers(e.detail?.users || db.getUsersSync());
+    };
+    window.addEventListener('users-registry-updated', handleRegistryUpdate);
+    return () => window.removeEventListener('users-registry-updated', handleRegistryUpdate);
+  }, []);
 
   if (!barber) {
     return (
@@ -129,15 +140,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     setLoading(true);
 
     try {
-      const generateId = () => {
-        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      };
+      const finalCustomerName = db.getUserNameById(user.id, user.fullName || user.email.split('@')[0]);
 
       const newBooking: Booking = {
-        id: generateId(),
+        id: crypto.randomUUID(),
         customerId: user.id,
-        customerName: user.fullName || user.email.split('@')[0],
+        customerName: finalCustomerName,
         customerEmail: user.email,
         barberId: barber.id,
         serviceId: selectedService.id,
@@ -160,7 +168,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
       }
     } catch (err: any) {
       setToast({ 
-        message: lang === 'hr' ? `Došlo je do neočekivane greške: ${err.message}` : `An unexpected error occurred: ${err.message}`, 
+        message: lang === 'hr' ? `Greška: ${err.message}` : `Error: ${err.message}`, 
         type: 'error' 
       });
     } finally {
@@ -227,7 +235,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           
           <div className="flex justify-between items-end w-full">
             <div className="space-y-4">
-              <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none">{barber.fullName}</h1>
+              <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none">
+                {db.getUserNameById(barber.userId, barber.fullName)}
+              </h1>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="gold"><Star size={10} className="mr-1 fill-current" /> {avgRating}</Badge>
                 <Badge variant="neutral"><Scissors size={10} className="mr-1" /> {totalCuts} šišanja</Badge>
@@ -320,7 +330,9 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                     <Card key={review.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-4">
                        <div className="flex justify-between items-start">
                           <div className="flex flex-col">
-                             <span className="text-xs font-black text-white italic uppercase tracking-tight">{review.customerName || review.customerEmail.split('@')[0]}</span>
+                             <span className="text-xs font-black text-white italic uppercase tracking-tight">
+                               {db.getUserNameById(review.customerId, review.customerName || review.customerEmail.split('@')[0])}
+                             </span>
                              <span className="text-[8px] text-zinc-700 font-black uppercase tracking-widest mt-1">{new Date(review.createdAt).toLocaleDateString()}</span>
                           </div>
                           <div className="flex gap-0.5">

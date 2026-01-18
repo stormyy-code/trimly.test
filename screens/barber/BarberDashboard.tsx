@@ -2,10 +2,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../../store/database';
 import { supabase } from '../../store/supabase';
-import { Booking } from '../../types';
-import { Card, Badge, Button } from '../../components/UI';
+import { Booking, User } from '../../types';
+import { Card, Badge, Button, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Check, X, Wallet, Scissors, User as UserIcon, TrendingUp, CalendarDays, ShieldAlert, Bell, Loader2, Zap } from 'lucide-react';
+import { Check, X, Wallet, Scissors, User as UserIcon, TrendingUp, CalendarDays, ShieldAlert, Bell, Loader2, Zap, AlertCircle } from 'lucide-react';
 import { APP_CONFIG } from '../../constants';
 
 interface BarberDashboardProps {
@@ -31,25 +31,40 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   const [activeTab, setActiveTab] = useState<'pending' | 'active' | 'history'>('pending');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  const [allProfiles, setAllProfiles] = useState<User[]>([]);
 
   const t = translations[lang];
 
-  useEffect(() => {
-    const handleSync = () => setRefreshTrigger(prev => prev + 1);
-    window.addEventListener('app-sync-complete', handleSync);
-    
-    // Eksplicitni fetch pri učitavanju za svježe podatke
-    db.getBookings(barberId, 'barber');
+  const refreshAll = async () => {
+    const users = await db.getUsers();
+    setAllProfiles(users);
+    await db.getBookings(barberId, 'barber');
+    setRefreshTrigger(prev => prev + 1);
+  };
 
+  useEffect(() => {
+    refreshAll();
+
+    const handleSync = () => refreshAll();
+    window.addEventListener('app-sync-complete', handleSync);
+    window.addEventListener('user-profile-updated', handleSync);
+    
     const channel = supabase
-      .channel('barber-bookings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barberId=eq.${barberId}` }, () => {
-        db.getBookings(barberId, 'barber');
+      .channel('barber-bookings-realtime')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'bookings', 
+        filter: `barber_id=eq.${barberId}` 
+      }, () => {
+        refreshAll();
       })
       .subscribe();
     
     return () => {
       window.removeEventListener('app-sync-complete', handleSync);
+      window.removeEventListener('user-profile-updated', handleSync);
       supabase.removeChannel(channel);
     };
   }, [barberId]);
@@ -61,10 +76,11 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
     const pending = rawBookings.filter(b => b.status === 'pending');
     const active = rawBookings.filter(b => b.status === 'accepted');
-    const history = rawBookings.filter(b => b.status === 'completed' || b.status === 'rejected');
+    const history = rawBookings.filter(b => b.status === 'completed' || b.status === 'rejected' || b.status === 'cancelled');
 
     const todayStr = new Date().toISOString().split('T')[0];
     const completed = rawBookings.filter(b => b.status === 'completed');
+    
     const velocity = {
       daily: completed.filter(b => b.date === todayStr).length,
       monthly: completed.length,
@@ -80,13 +96,10 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   const updateStatus = async (bookingId: string, status: Booking['status']) => {
     setIsUpdating(bookingId);
     
-    // Pronađi ovaj booking da znamo datum i vrijeme
     const currentBooking = db.getBookingsSync().find(b => b.id === bookingId);
+    const result = await db.updateBookingStatus(bookingId, status);
     
-    const success = await db.updateBookingStatus(bookingId, status);
-    
-    if (success) {
-      // Ako smo prihvatili termin, automatski odbijamo ostale klijente koji čekaju za ISTI termin
+    if (result.success) {
       if (status === 'accepted' && currentBooking) {
         const othersToReject = db.getBookingsSync().filter(b => 
           b.id !== bookingId &&
@@ -101,62 +114,109 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
         }
       }
 
-      await db.getBookings(barberId, 'barber');
-      setRefreshTrigger(prev => prev + 1);
+      setToast({ msg: status === 'accepted' ? 'Termin prihvaćen!' : 'Termin odbijen.', type: 'success' });
+      await refreshAll();
+    } else {
+      setToast({ msg: `Greška: ${result.error || 'Neuspjelo ažuriranje'}`, type: 'error' });
     }
     setIsUpdating(null);
   };
 
-  const renderBookingCard = (booking: Booking) => (
-    <Card key={booking.id} className="p-6 border-white/5 bg-zinc-950 rounded-[2.5rem] space-y-6 relative overflow-hidden shadow-2xl">
-      {isUpdating === booking.id && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center">
-          <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
-        </div>
-      )}
-      <div className="flex justify-between items-center gap-4">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="shrink-0 w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center text-[#C5A059] border border-white/5">
-            <UserIcon size={24} />
+  const renderBookingCard = (booking: Booking) => {
+    const isCancelled = booking.status === 'cancelled';
+    
+    // UVIJEK tražimo najnovije ime iz tablice profila pomoću customerId-a
+    const clientProfile = allProfiles.find(p => p.id === booking.customerId);
+    const displayName = clientProfile?.fullName || booking.customerName || booking.customerEmail.split('@')[0];
+    
+    return (
+      <Card key={booking.id} className={`p-6 border-white/5 bg-zinc-950 rounded-[2.5rem] space-y-6 relative overflow-hidden shadow-2xl ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
+        {isUpdating === booking.id && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center">
+            <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
           </div>
-          <div className="min-w-0">
-            <h3 className="font-black text-sm text-white uppercase italic tracking-tighter leading-none truncate">{booking.customerName || booking.customerEmail.split('@')[0]}</h3>
-            <p className="text-[8px] text-zinc-600 font-black uppercase tracking-[0.2em] mt-2 truncate">{booking.serviceName}</p>
+        )}
+        <div className="flex justify-between items-center gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className={`shrink-0 w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-white/5 ${isCancelled ? 'text-red-500/50' : 'text-[#C5A059]'}`}>
+              {clientProfile?.avatarUrl ? (
+                <img src={clientProfile.avatarUrl} className="w-full h-full object-cover rounded-2xl" alt="" />
+              ) : (
+                <UserIcon size={24} />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-black text-sm text-white uppercase italic tracking-tighter leading-none truncate">{displayName}</h3>
+              <p className="text-[8px] text-zinc-600 font-black uppercase tracking-[0.2em] mt-2 truncate">{booking.serviceName}</p>
+            </div>
+          </div>
+          <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
+            <span className="block font-black text-2xl text-white italic tracking-tighter leading-none">{booking.price}€</span>
+            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[7px]">
+              {isCancelled ? (lang === 'hr' ? 'OTKAZANO' : 'CANCELLED') : booking.status}
+            </Badge>
           </div>
         </div>
-        <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
-          <span className="block font-black text-2xl text-white italic tracking-tighter leading-none">{booking.price}€</span>
-          <Badge variant={booking.status === 'pending' ? 'warning' : 'success'} className="text-[7px]">{booking.status}</Badge>
+        
+        <div className="grid grid-cols-2 gap-4 p-5 bg-black/40 rounded-3xl border border-white/[0.03]">
+          <div className="text-center space-y-1 min-w-0">
+            <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Datum</p>
+            <span className="text-[10px] font-black text-zinc-400 truncate">{booking.date}</span>
+          </div>
+          <div className="text-center border-l border-white/5 space-y-1 min-w-0">
+            <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Vrijeme</p>
+            <span className="text-[10px] font-black text-zinc-400 truncate">{booking.time}h</span>
+          </div>
         </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-4 p-5 bg-black/40 rounded-3xl border border-white/[0.03]">
-        <div className="text-center space-y-1 min-w-0">
-          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Datum</p>
-          <span className="text-[10px] font-black text-zinc-400 truncate">{booking.date}</span>
-        </div>
-        <div className="text-center border-l border-white/5 space-y-1 min-w-0">
-          <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Vrijeme</p>
-          <span className="text-[10px] font-black text-zinc-400 truncate">{booking.time}h</span>
-        </div>
-      </div>
 
-      <div className="flex gap-3">
-        {booking.status === 'pending' && (
-          <>
-            <button className="flex-1 h-14 bg-zinc-800 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all" onClick={() => updateStatus(booking.id, 'rejected')}>{t.decline}</button>
-            <Button variant="primary" className="flex-[2] h-14 text-[9px] uppercase font-black rounded-2xl shadow-2xl" onClick={() => updateStatus(booking.id, 'accepted')}>{t.accept}</Button>
-          </>
+        {!isCancelled && (
+          <div className="flex gap-3">
+            {booking.status === 'pending' && (
+              <>
+                <button 
+                  disabled={!!isUpdating}
+                  className="flex-1 h-14 bg-zinc-800 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50" 
+                  onClick={() => updateStatus(booking.id, 'rejected')}
+                >
+                  {t.decline}
+                </button>
+                <Button 
+                  variant="primary" 
+                  disabled={!!isUpdating}
+                  className="flex-[2] h-14 text-[9px] uppercase font-black rounded-2xl shadow-2xl" 
+                  onClick={() => updateStatus(booking.id, 'accepted')}
+                >
+                  {t.accept}
+                </Button>
+              </>
+            )}
+            {booking.status === 'accepted' && (
+              <Button 
+                variant="secondary" 
+                disabled={!!isUpdating}
+                className="w-full h-14 text-[9px] font-black uppercase rounded-2xl border-emerald-500/20 text-emerald-500" 
+                onClick={() => updateStatus(booking.id, 'completed')}
+              >
+                {t.finalizeCut}
+              </Button>
+            )}
+          </div>
         )}
-        {booking.status === 'accepted' && (
-          <Button variant="secondary" className="w-full h-14 text-[9px] font-black uppercase rounded-2xl border-emerald-500/20 text-emerald-500" onClick={() => updateStatus(booking.id, 'completed')}>{t.finalizeCut}</Button>
+        
+        {isCancelled && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
+             <AlertCircle size={14} className="text-red-500" />
+             <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Ovaj termin je otkazan.</span>
+          </div>
         )}
-      </div>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-8 pb-32 animate-lux-fade">
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+      
       <section className="bg-zinc-950 border border-white/10 p-10 rounded-[3rem] shadow-2xl flex flex-col items-center gap-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4">
            <Zap size={20} className="text-emerald-500 opacity-20" />

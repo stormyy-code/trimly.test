@@ -1,17 +1,25 @@
 
-import React from 'react';
-import { Clock, LogOut, RefreshCcw, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, LogOut, RefreshCcw, ShieldCheck, Loader2 } from 'lucide-react';
 import { Button } from '../../components/UI';
 import { Language, translations } from '../../translations';
 
 interface BarberWaitingRoomProps {
   lang: Language;
   onLogout: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 const BarberWaitingRoom: React.FC<BarberWaitingRoomProps> = ({ lang, onLogout, onRefresh }) => {
   const t = translations[lang];
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefresh();
+    // Čekamo malo da se UI osvježi ako je došlo do promjene
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] px-8 text-center space-y-12 animate-lux-fade">
@@ -34,8 +42,14 @@ const BarberWaitingRoom: React.FC<BarberWaitingRoomProps> = ({ lang, onLogout, o
       </div>
 
       <div className="w-full max-w-[280px] space-y-4">
-        <Button onClick={onRefresh} variant="primary" className="w-full h-18 text-[10px] flex items-center justify-center gap-3">
-          <RefreshCcw size={16} /> {lang === 'hr' ? 'Provjeri status' : 'Check Status'}
+        <Button 
+          onClick={handleRefresh} 
+          variant="primary" 
+          disabled={isRefreshing}
+          loading={isRefreshing}
+          className="w-full h-18 text-[10px] flex items-center justify-center gap-3"
+        >
+          {!isRefreshing && <RefreshCcw size={16} />} {lang === 'hr' ? 'Provjeri status' : 'Check Status'}
         </Button>
         <button 
           onClick={onLogout} 

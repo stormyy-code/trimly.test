@@ -70,8 +70,8 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       imageUrl: imageUrl || 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=400'
     };
 
-    const success = await db.addService(newService);
-    if (success) {
+    const result = await db.addService(newService);
+    if (result.success) {
       setToast({ msg: t.done, type: 'success' });
       await fetchServices();
       setName('');
@@ -81,7 +81,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       setImageUrl('');
       setIsAdding(false);
     } else {
-      setToast({ msg: 'Greška pri spremanju usluge.', type: 'error' });
+      setToast({ msg: `Baza javlja: ${result.error || 'Nepoznata greška'}`, type: 'error' });
     }
     setLoading(false);
   };

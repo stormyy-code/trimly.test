@@ -43,23 +43,24 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
 
   const handleUpdateName = async () => {
     const trimmedName = tempName.trim();
-    if (!trimmedName || trimmedName === fullName) {
-      setIsEditingName(false);
-      return;
-    }
+    if (!trimmedName) return;
 
     setPassLoading(true);
     try {
-      const success = await db.updateProfileDetails(user.id, { fullName: trimmedName });
-      if (success) {
+      const result = await db.updateProfileDetails(user.id, { fullName: trimmedName });
+      
+      // FIX: Provjeravamo result.success jer db.ts vraća objekt { success: boolean }
+      if (result.success) {
         setFullName(trimmedName);
         setToastMsg({ msg: t.done, type: 'success' });
         setIsEditingName(false);
+        // Osvježi aktivnog korisnika u App.tsx preko eventa
+        window.dispatchEvent(new Event('user-profile-updated'));
       } else {
-        setToastMsg({ msg: 'Greška pri spremanju.', type: 'error' });
+        setToastMsg({ msg: result.error || 'Greška pri spremanju.', type: 'error' });
       }
-    } catch (e) {
-      setToastMsg({ msg: 'Greška na mreži.', type: 'error' });
+    } catch (e: any) {
+      setToastMsg({ msg: 'Greška na mreži: ' + e.message, type: 'error' });
     } finally {
       setPassLoading(false);
     }
@@ -79,8 +80,8 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       }
 
       if (result.url) {
-        const success = await db.updateProfileDetails(user.id, { avatarUrl: result.url });
-        if (success) {
+        const updateResult = await db.updateProfileDetails(user.id, { avatarUrl: result.url });
+        if (updateResult.success) {
           setProfilePic(result.url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
         } else {

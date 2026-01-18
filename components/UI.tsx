@@ -72,7 +72,7 @@ export const Toast: React.FC<{
   }, [onClose]);
 
   return (
-    <div className="fixed top-14 left-6 right-6 z-[300] animate-lux-fade">
+    <div className="fixed top-14 left-6 right-6 z-[999] animate-lux-fade">
       <div className={`p-5 rounded-2xl flex items-center justify-between border premium-blur ios-shadow ${
         type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'
       }`}>

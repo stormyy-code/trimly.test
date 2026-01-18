@@ -6,7 +6,6 @@ import { User, BarberProfile, UserRole } from './types';
 import { Language, translations } from './translations';
 import LoginScreen from './screens/auth/LoginScreen';
 import RegisterScreen from './screens/auth/RegisterScreen';
-import ChangePasswordScreen from './screens/auth/ChangePasswordScreen';
 import Layout from './components/Layout';
 import CustomerHome from './screens/customer/CustomerHome';
 import BarberProfileDetail from './screens/customer/BarberProfileDetail';
@@ -22,10 +21,7 @@ import AdminBarbers from './screens/admin/AdminBarbers';
 import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { 
-  Loader2,
-  ShieldCheck
-} from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Toast } from './components/UI';
 
 const App: React.FC = () => {
@@ -37,51 +33,59 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [lang, setLang] = useState<Language>('hr'); 
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
-  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   
   const t = translations[lang];
   const prevRoleRef = useRef<UserRole | null>(null);
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
     try {
-      await db.getUsers(); 
-      await db.getBarbers();
-      await db.getReviews();
-      await db.getServices();
-      await db.getBookings(uId, uRole);
-      
+      await Promise.allSettled([
+        db.getUsers(),
+        db.getBarbers(),
+        db.getReviews(),
+        db.getServices(),
+        db.getBookings(uId, uRole)
+      ]);
       window.dispatchEvent(new Event('app-sync-complete'));
     } catch (e) {
-      console.warn("Sync error:", e);
+      console.warn("Sync warning:", e);
     }
   }, []);
 
-  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser | {id: string, email: string}) => {
+  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser | {id: string, email: string, user_metadata?: any}) => {
+    setIsInitializing(true);
     try {
-      // Re-fetch profile to ensure role is correct
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
-      if (error) console.warn("Profile fetch error:", error.message);
-
-      let finalRole: UserRole = 'customer';
-      if (profile && profile.role) {
-        const rawRole = profile.role.toLowerCase().trim();
-        if (rawRole === 'admin') finalRole = 'admin';
-        else if (rawRole === 'barber') finalRole = 'barber';
-      }
+      const metadataRole = (supabaseUser as any).user_metadata?.role;
       
-      const fullUser = { 
+      if (!profile && !metadataRole) {
+        localStorage.setItem('trimly_partial_user', JSON.stringify({id: supabaseUser.id, email: supabaseUser.email}));
+        setUser(null);
+        setIsInitializing(false);
+        return;
+      }
+
+      localStorage.removeItem('trimly_partial_user');
+
+      let rawRole = (profile?.role || metadataRole || 'customer').toLowerCase().trim();
+      let finalRole: UserRole = 'customer';
+      
+      if (rawRole === 'admin') finalRole = 'admin';
+      else if (rawRole === 'barber') finalRole = 'barber';
+      
+      const fullUser: User = { 
         id: supabaseUser.id, 
-        email: supabaseUser.email || '', 
+        email: supabaseUser.email || profile?.email || '', 
         role: finalRole,
-        fullName: profile?.fullName || profile?.full_name || '',
-        avatarUrl: profile?.avatarUrl || profile?.avatar_url || '',
-        banned: profile?.banned || false
-      } as User;
+        fullName: profile?.full_name || (supabaseUser as any).user_metadata?.full_name || '',
+        avatarUrl: profile?.avatar_url || '',
+        banned: !!profile?.banned
+      };
       
       if (prevRoleRef.current && prevRoleRef.current !== finalRole) {
         setActiveTab('home');
@@ -92,50 +96,67 @@ const App: React.FC = () => {
       db.setActiveUser(fullUser);
       setDbStatus('connected');
       
-      syncAllData(fullUser.id, finalRole);
+      await syncAllData(fullUser.id, finalRole);
 
       if (finalRole === 'barber') {
         const barbers = await db.getBarbers();
-        const bProf = (barbers || []).find(b => b.userId === fullUser.id);
+        const bProf = barbers.find(b => b.userId === fullUser.id);
         setBarberProfile(bProf || null);
       }
     } catch (err: any) {
-      console.error("Auth handler error:", err);
-      setUser({ id: supabaseUser.id, email: (supabaseUser as any).email || '', role: 'customer' as UserRole });
+      console.error("Auth Critical Error:", err);
+      if (supabaseUser.id) {
+         setUser({ id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' });
+      }
     } finally {
       setIsInitializing(false);
     }
   }, [syncAllData]);
 
   useEffect(() => {
-    const handleProfileRefresh = () => {
-      const active = db.getActiveUser();
-      if (active) {
-        setUser(prev => prev ? { ...prev, ...active } : active);
+    const handleProfileUpdate = () => {
+      const updated = db.getActiveUser();
+      if (updated) {
+        setUser(prev => prev ? { ...prev, ...updated } : updated);
       }
     };
 
-    window.addEventListener('user-profile-updated', handleProfileRefresh);
-    return () => window.removeEventListener('user-profile-updated', handleProfileRefresh);
+    window.addEventListener('user-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('user-profile-updated', handleProfileUpdate);
   }, []);
 
   useEffect(() => {
+    if (!user || user.role !== 'barber') return;
+
+    const channel = supabase
+      .channel(`barber-approval-${user.id}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'barbers', 
+        filter: `user_id=eq.${user.id}` 
+      }, async (payload) => {
+        if (payload.new && payload.new.approved === true) {
+          const barbers = await db.getBarbers();
+          const bProf = barbers.find(b => b.userId === user.id);
+          setBarberProfile(bProf || null);
+          setToast({ message: "Vaš profil je odobren!", type: 'success' });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  useEffect(() => {
     let mounted = true;
-
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
-      setIsRecoveringPassword(true);
-    }
-
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && mounted) {
-          if (!isRecoveringPassword) {
-            await handleAuthUser(session.user);
-          } else {
-            setIsInitializing(false);
-          }
+          await handleAuthUser(session.user);
         } else if (mounted) {
           setIsInitializing(false);
         }
@@ -148,91 +169,52 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecoveringPassword(true);
-        setIsInitializing(false);
-      } else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        if (!isRecoveringPassword) {
-          handleAuthUser(session.user);
-        }
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setBarberProfile(null);
-        setIsRecoveringPassword(false);
         setIsInitializing(false);
-        localStorage.clear();
+        localStorage.removeItem('trimly_active_user');
+        localStorage.removeItem('trimly_partial_user');
       }
     });
-
-    const profileChannel = supabase
-      .channel('public-profiles')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-        if (payload.new) {
-          const { id, banned } = payload.new;
-          window.dispatchEvent(new CustomEvent('users-registry-updated', { detail: { userId: id, banned } }));
-          if (id === user?.id && banned === true) {
-            setToast({ message: translations[lang].suspendedError, type: 'error' });
-            setTimeout(handleLogout, 2000);
-          }
-        }
-      })
-      .subscribe();
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
-      supabase.removeChannel(profileChannel);
     };
-  }, [handleAuthUser, user?.id, lang, isRecoveringPassword]);
+  }, [handleAuthUser]);
 
   const handleLogout = async () => {
     setIsInitializing(true);
     await supabase.auth.signOut();
     setUser(null);
     setBarberProfile(null);
-    setIsRecoveringPassword(false);
     setActiveTab('home');
     setIsInitializing(false);
-    window.location.hash = '';
-  };
-
-  const handleRefreshStatus = async () => {
-    if (user && user.role === 'barber') {
-      const barbers = await db.getBarbers();
-      const bProf = (barbers || []).find(b => b.userId === user.id);
-      setBarberProfile(bProf || null);
-      if (bProf?.approved) {
-        setToast({ message: lang === 'hr' ? 'Profil odobren!' : 'Profile approved!', type: 'success' });
-      } else {
-        setToast({ message: lang === 'hr' ? 'Još uvijek na čekanju...' : 'Still waiting...', type: 'error' });
-      }
-    }
   };
 
   if (isInitializing) {
     return (
       <div className="h-full w-full bg-black flex flex-col items-center justify-center p-12">
-        <div className="relative mb-10">
-          <div className="absolute inset-0 bg-[#D4AF37]/20 blur-3xl rounded-full scale-150 animate-pulse"></div>
-          <Loader2 className="animate-spin text-[#D4AF37] relative z-10" size={48} />
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500 animate-pulse text-center leading-loose">
-          Trimly Zagreb<br/>Secure Syncing
-        </p>
+        <Loader2 className="animate-spin text-[#D4AF37] mb-4" size={48} />
+        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest italic">Pristupanje mreži...</span>
       </div>
     );
   }
 
-  if (isRecoveringPassword) {
+  const partialUser = localStorage.getItem('trimly_partial_user');
+  if (!user && partialUser) {
+    const pU = JSON.parse(partialUser);
     return (
-      <ChangePasswordScreen 
+      <RegisterScreen 
         lang={lang} 
-        onComplete={() => {
-          setIsRecoveringPassword(false);
-          setToast({ message: t.passwordUpdated, type: 'success' });
-          handleLogout();
-        }} 
+        setLang={setLang} 
+        onLogin={(u) => handleAuthUser(u)} 
+        onToggle={handleLogout} 
+        dbStatus={dbStatus}
+        forceUserEmail={pU.email}
       />
     );
   }
@@ -251,29 +233,24 @@ const App: React.FC = () => {
         case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'bookings': return <CustomerBookings lang={lang} user={user} />;
-        case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} onRoleUpdate={() => {}} />;
+        case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} />;
         default: return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
       }
     }
 
     if (user.role === 'barber') {
-      // Ako barber još nije ispunio formu, prikaži mu formu
       if (!barberProfile) {
-        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} onLogout={handleLogout} />;
       }
-      
-      // Ako je ispunio, ali NIJE odobren, prikaži mu Waiting Room
       if (!barberProfile.approved) {
-        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={handleRefreshStatus} />;
+        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
       }
-
-      // Ako je odobren, pusti ga u Dashboard
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'schedule': return <BarberAvailability lang={lang} barberId={barberProfile.id} />;
         case 'services': return <BarberServices lang={lang} barberId={barberProfile.id} />;
-        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => {}} />;
+        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => {}} onLogout={handleLogout} />;
         default: return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
       }
     }
@@ -284,20 +261,11 @@ const App: React.FC = () => {
         case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'barbers': return <AdminBarbers lang={lang} onSelectBarber={setSelectedBarberId} />;
         case 'approvals': return <AdminApprovals lang={lang} />;
-        case 'settings': return (
-          <div className="flex flex-col items-center justify-center pt-20 space-y-8">
-             <ShieldCheck size={80} className="text-[#D4AF37]" />
-             <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Network Command</h2>
-             <button onClick={handleLogout} className="bg-red-500/10 text-red-500 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px]">Odjavi se</button>
-          </div>
-        );
         default: return <AdminDashboard lang={lang} onLogout={handleLogout} />;
       }
     }
     return null;
   };
-
-  const isBarberUnapproved = user?.role === 'barber' && barberProfile && !barberProfile.approved;
 
   return (
     <div className="h-full w-full bg-black">
@@ -308,7 +276,7 @@ const App: React.FC = () => {
           onTabChange={setActiveTab} 
           onLogout={handleLogout}
           lang={lang}
-          hideShell={!!selectedBarberId || isBarberUnapproved} 
+          hideShell={!!selectedBarberId || (user.role === 'barber' && barberProfile && !barberProfile.approved)} 
           title={user.role === 'admin' ? 'Network Command' : user.role === 'barber' ? 'Barber Hub' : 'Trimly Zagreb'}
         >
           {renderView()}
@@ -316,7 +284,7 @@ const App: React.FC = () => {
       ) : (
         renderView()
       )}
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.message.includes('odobren') ? 'success' : toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
