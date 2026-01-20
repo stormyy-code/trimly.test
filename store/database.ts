@@ -100,7 +100,8 @@ export const db = {
     try {
       const dbUpdates: any = {};
       if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
-      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatar_url;
+      // Fixed: Access avatarUrl from the updates object using camelCase.
+      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
       
       const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', userId);
       

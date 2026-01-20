@@ -20,7 +20,6 @@ import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminBarbers from './screens/admin/AdminBarbers';
 import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
-import { User as SupabaseUser } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { Toast } from './components/UI';
 
@@ -34,7 +33,6 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('hr'); 
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
   
-  const t = translations[lang];
   const prevRoleRef = useRef<UserRole | null>(null);
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
@@ -52,16 +50,18 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleAuthUser = useCallback(async (supabaseUser: SupabaseUser | {id: string, email: string, user_metadata?: any}) => {
+  const handleAuthUser = useCallback(async (supabaseUser: any) => {
     setIsInitializing(true);
     try {
-      const { data: profile, error } = await supabase
+      if (!supabaseUser) return;
+
+      const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
-      const metadataRole = (supabaseUser as any).user_metadata?.role;
+      const metadataRole = supabaseUser.user_metadata?.role;
       
       if (!profile && !metadataRole) {
         localStorage.setItem('trimly_partial_user', JSON.stringify({id: supabaseUser.id, email: supabaseUser.email}));
@@ -82,7 +82,7 @@ const App: React.FC = () => {
         id: supabaseUser.id, 
         email: supabaseUser.email || profile?.email || '', 
         role: finalRole,
-        fullName: profile?.full_name || (supabaseUser as any).user_metadata?.full_name || '',
+        fullName: profile?.full_name || supabaseUser.user_metadata?.full_name || '',
         avatarUrl: profile?.avatar_url || '',
         banned: !!profile?.banned
       };
@@ -105,7 +105,7 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Auth Critical Error:", err);
-      if (supabaseUser.id) {
+      if (supabaseUser && supabaseUser.id) {
          setUser({ id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' });
       }
     } finally {
@@ -113,7 +113,6 @@ const App: React.FC = () => {
     }
   }, [syncAllData]);
 
-  // Global Real-time Listeners for Bookings
   useEffect(() => {
     if (!user) return;
 
@@ -138,7 +137,6 @@ const App: React.FC = () => {
               if (status === 'pending') setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
               if (status === 'cancelled') setToast({ message: 'Klijent je otkazao termin.', type: 'error' });
            }
-           // Trigger sync to refresh UI
            db.getBookings(user.id, user.role);
         }
       })
@@ -147,7 +145,7 @@ const App: React.FC = () => {
         schema: 'public',
         table: 'bookings',
         filter: `${column}=eq.${user.id}`
-      }, (payload) => {
+      }, () => {
         if (user.role === 'barber') {
            setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
            db.getBookings(user.id, user.role);
@@ -269,8 +267,8 @@ const App: React.FC = () => {
   const renderView = () => {
     if (!user) {
       return activeTab === 'register' 
-        ? <RegisterScreen lang={lang} setLang={setLang} onLogin={handleAuthUser as any} onToggle={() => setActiveTab('login')} dbStatus={dbStatus} />
-        : <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser as any} onToggle={() => setActiveTab('register')} dbStatus={dbStatus} />;
+        ? <RegisterScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('login')} dbStatus={dbStatus} />
+        : <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('register')} dbStatus={dbStatus} />;
     }
 
     if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
@@ -287,10 +285,10 @@ const App: React.FC = () => {
 
     if (user.role === 'barber') {
       if (!barberProfile) {
-        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email} as any)} onLogout={handleLogout} />;
+        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email})} onLogout={handleLogout} />;
       }
       if (!barberProfile.approved) {
-        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={() => handleAuthUser({id: user.id, email: user.email} as any)} />;
+        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={() => handleAuthUser({id: user.id, email: user.email})} />;
       }
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
