@@ -45,6 +45,7 @@ const mapBarberToDb = (b: Partial<BarberProfile>) => {
   if (b.weeklyWinner !== undefined) payload.weekly_winner = b.weeklyWinner;
   if (b.workingHours !== undefined) payload.working_hours = b.workingHours;
   if (b.slotInterval !== undefined) payload.slot_interval = b.slotInterval;
+  // Fix: changed b.last_updated_week to b.lastUpdatedWeek
   if (b.lastUpdatedWeek !== undefined) payload.last_updated_week = b.lastUpdatedWeek;
   return payload;
 };
@@ -99,7 +100,7 @@ export const db = {
     try {
       const dbUpdates: any = {};
       if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
-      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
+      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatar_url;
       
       const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', userId);
       
@@ -209,12 +210,12 @@ export const db = {
   getServices: async (barberId?: string): Promise<Service[]> => {
     try {
       let query = supabase.from('services').select('*');
-      if (barberId) query = query.eq('bar_id', barberId);
+      if (barberId) query = query.eq('barber_id', barberId);
       const { data, error } = await query;
       if (error) throw error;
       const mapped = (data || []).map((s: any) => ({
         id: s.id,
-        barberId: s.bar_id,
+        barberId: s.barber_id,
         name: s.name,
         price: s.price,
         duration: s.duration,
@@ -235,7 +236,7 @@ export const db = {
     try {
       const dbData = {
         id: service.id,
-        bar_id: service.barberId,
+        barber_id: service.barberId,
         name: service.name,
         price: service.price,
         duration: service.duration,

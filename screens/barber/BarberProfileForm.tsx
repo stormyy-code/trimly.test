@@ -5,8 +5,8 @@ import { StorageService } from '../../services/StorageService';
 import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
-import { Button, Input, Card, Toast } from '../../components/UI';
-import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, Scissors, AlertTriangle, Images, MapPin, LogOut } from 'lucide-react';
+import { Button, Input, Card, Toast, Badge } from '../../components/UI';
+import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, Scissors, AlertTriangle, Images, MapPin, LogOut, ShieldCheck } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 import { supabase } from '../../store/supabase';
@@ -23,6 +23,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isAlreadyApproved, setIsAlreadyApproved] = useState(false);
   
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -51,6 +52,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         const barbers = await db.getBarbers();
         const existing = barbers.find(b => b.userId === userId);
         if (existing) {
+          setIsAlreadyApproved(existing.approved);
           setFullName(existing.fullName || '');
           setPhoneNumber(existing.phoneNumber || '');
           setNeighborhood(existing.neighborhood || '');
@@ -120,9 +122,10 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     setIsLoading(true);
     setSaveError(null);
     try {
-      const roleResult = await db.updateProfileRole(userId, 'barber');
-      if (!roleResult.success) {
-        throw new Error(roleResult.error);
+      // Role update radimo samo ako već nismo odobreni
+      if (!isAlreadyApproved) {
+        const roleResult = await db.updateProfileRole(userId, 'barber');
+        if (!roleResult.success) throw new Error(roleResult.error);
       }
 
       const barbers = await db.getBarbers();
@@ -140,6 +143,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         bio: bio || '',
         gallery: gallery,
         workMode,
+        // CRITICAL: Zadržavamo odobren status ako ga već imamo!
         approved: existing ? existing.approved : false,
         featured: existing ? existing.featured : false,
         weeklyWinner: existing ? existing.weeklyWinner : false,
@@ -153,17 +157,19 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const result = await db.saveBarbers(profile);
       if (result.success) {
         setToastMsg({ msg: t.done, type: 'success' });
-        setTimeout(onComplete, 1200);
+        // Ako je ovo bio prvi unos (setup), idemo na onComplete
+        if (!isAlreadyApproved) {
+          setTimeout(onComplete, 1200);
+        } else {
+          // Ako je samo update, samo refreshamo lokalne podatke
+          await db.getBarbers();
+        }
       } else {
         throw new Error(result.error);
       }
     } catch (err: any) {
       console.error("Save Error:", err);
-      if (err.message.includes('infinite recursion')) {
-        setSaveError("POLISA BAZE JE PUKLA: Molimo pokrenite SQL kod iz zadnjeg odgovora u Supabase Editoru.");
-      } else {
-        setSaveError(err.message);
-      }
+      setSaveError(err.message);
       setToastMsg({ msg: 'Spremanje nije uspjelo.', type: 'error' });
     } finally {
       setIsLoading(false);
@@ -192,12 +198,28 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     <div className="space-y-10 pb-32 animate-slide-up overflow-x-hidden bg-black min-h-screen">
       {toastMsg && <Toast message={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
       
-      <header className="px-6 pt-12 text-center space-y-3">
-         <div className="w-16 h-16 bg-[#D4AF37] rounded-3xl flex items-center justify-center mx-auto shadow-2xl">
-            <Scissors size={32} className="text-black" />
+      <header className="px-6 pt-12 text-center space-y-4">
+         <div className="relative inline-block">
+            <div className="w-16 h-16 bg-[#D4AF37] rounded-3xl flex items-center justify-center mx-auto shadow-2xl">
+               <Scissors size={32} className="text-black" />
+            </div>
+            {isAlreadyApproved && (
+              <div className="absolute -top-2 -right-2 bg-emerald-500 p-1.5 rounded-full border-4 border-black shadow-xl">
+                 <ShieldCheck size={14} className="text-black" />
+              </div>
+            )}
          </div>
-         <h1 className="text-2xl font-black text-white italic uppercase tracking-tighter">Postavljanje Profila</h1>
-         <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Koračić do aktivacije</p>
+         <div className="space-y-1">
+            <h1 className="text-2xl font-black text-white italic uppercase tracking-tighter">
+              {isAlreadyApproved ? 'Postavke Profila' : 'Postavljanje Profila'}
+            </h1>
+            <p className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">
+              {isAlreadyApproved ? 'Vaša licenca je aktivna' : 'Koračić do aktivacije'}
+            </p>
+         </div>
+         {isAlreadyApproved && (
+           <Badge variant="gold" className="px-6 py-2.5">Mrežni Partner</Badge>
+         )}
       </header>
 
       <div className="px-6 space-y-10">
@@ -207,13 +229,13 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                {pic ? <img src={pic} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-800"><ImageIcon size={40} /></div>}
                {isUploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-[#D4AF37]" /></div>}
             </div>
-            <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-2 -right-2 w-11 h-11 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black border-4 border-black"><Camera size={20} /></button>
+            <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-2 -right-2 w-11 h-11 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black border-4 border-black active:scale-90 transition-all"><Camera size={20} /></button>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleProfilePicUpload} />
           </div>
           <div className="space-y-2">
             <h2 className="text-lg font-black text-white italic uppercase tracking-tighter">Profilna Slika</h2>
             <div onClick={handleCopyCode} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-full border border-white/5 cursor-pointer">
-              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Kôd: {BARBER_INVITE_CODE}</span>
+              <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Mrežni Kôd: {BARBER_INVITE_CODE}</span>
               {copied ? <CheckCircle2 size={10} className="text-emerald-500" /> : <Copy size={10} className="text-zinc-700" />}
             </div>
           </div>
@@ -225,7 +247,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                <div className="flex items-center gap-3 text-red-500 font-black uppercase text-[9px] tracking-widest">
                  <AlertTriangle size={14} /> GREŠKA PRILIKOM SPREMANJA
                </div>
-               <p className="text-zinc-400 text-[10px] italic leading-tight">{saveError}</p>
+               <p className="text-zinc-400 text-[10px] italic leading-tight">Moguće je da polisa baze brani izmjene. Provjerite internet vezu.</p>
             </div>
           )}
 
@@ -265,7 +287,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova (do 5 slika)</span>
                 </div>
                 {gallery.length < 5 && (
-                  <button onClick={() => galleryInputRef.current?.click()} className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-[#D4AF37]/5 px-4 py-2 rounded-xl border border-[#D4AF37]/10"><Plus size={14} /> Dodaj</button>
+                  <button onClick={() => galleryInputRef.current?.click()} className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-[#D4AF37]/5 px-4 py-2 rounded-xl border border-[#D4AF37]/10 active:scale-95 transition-all"><Plus size={14} /> Dodaj</button>
                 )}
                 <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleGalleryUpload} />
              </div>
@@ -287,7 +309,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
           </section>
 
           <Button className="w-full h-20 text-xs font-black shadow-2xl mt-8" onClick={handleSave} loading={isLoading}>
-            Spremi i pošalji na odobrenje
+            {isAlreadyApproved ? 'Spremi Promjene' : 'Spremi i pošalji na odobrenje'}
           </Button>
 
           <section className="space-y-6 pt-10 pb-10">

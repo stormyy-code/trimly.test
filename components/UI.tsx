@@ -23,7 +23,7 @@ export const Button: React.FC<{
       type={type}
       onClick={() => !disabled && !loading && onClick?.()}
       disabled={disabled || loading}
-      className={`w-full px-8 py-5 rounded-[1.5rem] font-black uppercase tracking-widest text-[11px] transition-all duration-300 disabled:opacity-30 flex items-center justify-center gap-3 outline-none ${variants[variant]} ${className}`}
+      className={`w-full px-4 sm:px-8 py-5 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] sm:text-[11px] transition-all duration-300 disabled:opacity-30 flex items-center justify-center gap-2 sm:gap-3 outline-none flex-shrink-0 ${variants[variant]} ${className}`}
     >
       {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : children}
     </button>
@@ -33,7 +33,7 @@ export const Button: React.FC<{
 export const Card: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className = '', onClick }) => (
   <div 
     onClick={onClick}
-    className={`bg-zinc-900/50 premium-blur rounded-[2.8rem] p-7 border border-white/[0.08] transition-all duration-300 ${onClick ? 'cursor-pointer active:scale-[0.98]' : ''} ${className}`}
+    className={`bg-zinc-900/50 premium-blur rounded-[2.2rem] sm:rounded-[2.8rem] p-5 sm:p-7 border border-white/[0.08] transition-all duration-300 overflow-hidden ${onClick ? 'cursor-pointer active:scale-[0.98]' : ''} ${className}`}
   >
     {children}
   </div>
@@ -48,15 +48,15 @@ export const Input: React.FC<{
   className?: string;
   required?: boolean;
 }> = ({ label, type = 'text', value, onChange, placeholder, className = '', required = false }) => (
-  <div className={`flex flex-col gap-3 w-full ${className}`}>
-    {label && <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.25em] block ml-5">{label}</label>}
+  <div className={`flex flex-col gap-2.5 w-full min-w-0 ${className}`}>
+    {label && <label className="text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] block ml-4 sm:ml-5 truncate">{label}</label>}
     <input
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       required={required}
-      className="w-full bg-[#0F0F0F] border border-white/[0.05] rounded-[1.25rem] px-7 py-5 text-white focus:border-[#D4AF37]/50 focus:bg-black outline-none transition-all duration-300 placeholder:text-zinc-800 text-[13px] font-bold block shadow-inner"
+      className="w-full bg-[#0F0F0F] border border-white/[0.05] rounded-[1.25rem] px-5 sm:px-7 py-4 sm:py-5 text-white focus:border-[#D4AF37]/50 focus:bg-black outline-none transition-all duration-300 placeholder:text-zinc-800 text-[12px] sm:text-[13px] font-bold block shadow-inner min-w-0"
     />
   </div>
 );
@@ -72,15 +72,15 @@ export const Toast: React.FC<{
   }, [onClose]);
 
   return (
-    <div className="fixed top-14 left-6 right-6 z-[999] animate-lux-fade">
-      <div className={`p-5 rounded-2xl flex items-center justify-between border premium-blur ios-shadow ${
+    <div className="fixed top-12 left-4 right-4 z-[999] animate-lux-fade">
+      <div className={`p-4 rounded-xl flex items-center justify-between border premium-blur ios-shadow ${
         type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'
       }`}>
-        <div className="flex items-center gap-4">
-          {type === 'success' ? <CheckCircle2 size={18} className="text-emerald-500" /> : <AlertCircle size={18} className="text-red-500" />}
-          <span className="text-[11px] font-black text-white uppercase tracking-widest leading-none">{message}</span>
+        <div className="flex items-center gap-3 min-w-0">
+          {type === 'success' ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> : <AlertCircle size={16} className="text-red-500 shrink-0" />}
+          <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none truncate">{message}</span>
         </div>
-        <button onClick={onClose} className="text-zinc-600 active:scale-90 transition-all"><X size={16} /></button>
+        <button onClick={onClose} className="text-zinc-600 active:scale-90 transition-all shrink-0"><X size={14} /></button>
       </div>
     </div>
   );
@@ -95,7 +95,7 @@ export const Badge: React.FC<{ children: React.ReactNode; variant?: 'success' | 
     gold: 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20',
   };
   return (
-    <span className={`text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-full inline-flex items-center justify-center text-center ${styles[variant]} ${className}`}>
+    <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest px-3 sm:px-4 py-1.5 sm:py-2 rounded-full inline-flex items-center justify-center text-center whitespace-nowrap ${styles[variant]} ${className}`}>
       {children}
     </span>
   );

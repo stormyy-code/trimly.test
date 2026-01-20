@@ -26,7 +26,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'register' | 'verify'>('register');
   
-  // OTP States
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -86,7 +85,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
-    // Auto focus next
     if (value && index < 5) {
       otpRefs.current[index + 1]?.focus();
     }
@@ -116,12 +114,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
       if (verifyError) throw verifyError;
 
       if (data.user) {
-        // Nakon uspješne verifikacije, osiguraj rolu u bazi
         await db.updateProfileRole(data.user.id, role);
         onLogin(data.user);
       }
     } catch (err: any) {
-      setError(lang === 'hr' ? 'Neispravan kod. Pokušajte ponovno.' : 'Invalid code. Try again.');
+      setError(lang === 'hr' ? 'Neispravan kod.' : 'Invalid code.');
       setOtp(['', '', '', '', '', '']);
       otpRefs.current[0]?.focus();
     } finally {
@@ -129,7 +126,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
     }
   };
 
-  // Trigger verify automatically when 6th digit is entered
   useEffect(() => {
     if (otp.join('').length === 6) {
       handleVerifyOtp();
@@ -138,19 +134,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
 
   if (view === 'verify') {
     return (
-      <div className="flex flex-col min-h-screen px-8 bg-[#0A0A0A] text-white items-center justify-center animate-lux-fade">
-        <div className="w-full max-w-sm space-y-12 text-center">
+      <div className="flex flex-col min-h-screen px-6 bg-[#0A0A0A] text-white items-center justify-center animate-lux-fade overflow-x-hidden">
+        <div className="w-full max-w-sm space-y-10 text-center flex flex-col items-center">
           <div className="space-y-4">
-            <div className="w-20 h-20 bg-[#D4AF37]/10 rounded-[2rem] flex items-center justify-center mx-auto border border-[#D4AF37]/20">
-               <ShieldCheck size={32} className="text-[#D4AF37]" />
+            <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-[1.5rem] flex items-center justify-center mx-auto border border-[#D4AF37]/20">
+               <ShieldCheck size={28} className="text-[#D4AF37]" />
             </div>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter">{t.verifyCode}</h2>
-            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest leading-relaxed">
-              {t.enterOtp} na <br/><span className="text-[#D4AF37]">{email}</span>
+            <h2 className="text-2xl font-black italic uppercase tracking-tighter">{t.verifyCode}</h2>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest leading-relaxed px-4">
+              {t.enterOtp} na <br/><span className="text-[#D4AF37] break-all">{email}</span>
             </p>
           </div>
 
-          <div className="flex justify-between gap-2 max-w-[320px] mx-auto">
+          <div className="flex justify-center gap-2 w-full max-w-[320px]">
             {otp.map((digit, i) => (
               <input
                 key={i}
@@ -161,16 +157,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
                 value={digit}
                 onChange={(e) => handleOtpChange(e.target.value, i)}
                 onKeyDown={(e) => handleOtpKeyDown(e, i)}
-                className="w-11 h-16 bg-[#0F0F0F] border border-white/10 rounded-xl text-center text-2xl font-black text-[#D4AF37] outline-none focus:border-[#D4AF37] focus:bg-zinc-900 transition-all shadow-inner"
+                className="flex-1 aspect-[2/3] max-h-16 bg-[#0F0F0F] border border-white/10 rounded-xl text-center text-xl font-black text-[#D4AF37] outline-none focus:border-[#D4AF37] focus:bg-zinc-900 transition-all shadow-inner min-w-0"
                 autoFocus={i === 0}
               />
             ))}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 w-full px-4">
             {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-[9px] font-black uppercase animate-shake">{error}</div>}
             
-            <Button onClick={handleVerifyOtp} loading={loading} className="h-18 shadow-2xl">
+            <Button onClick={handleVerifyOtp} loading={loading} className="h-16 shadow-2xl text-[10px]">
               {t.confirm}
             </Button>
             
@@ -188,27 +184,27 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
   }
 
   return (
-    <div className="flex flex-col min-h-screen px-8 pt-12 pb-12 bg-[#0A0A0A] text-white overflow-y-auto items-center w-full justify-center">
-       <div className="absolute top-12 flex bg-white/5 border border-white/10 rounded-full p-1 backdrop-blur-xl">
+    <div className="flex flex-col min-h-screen px-6 pt-12 pb-12 bg-[#0A0A0A] text-white overflow-y-auto items-center w-full justify-center">
+       <div className="absolute top-10 flex bg-white/5 border border-white/10 rounded-full p-1 backdrop-blur-xl">
         <button onClick={() => setLang('hr')} className={`px-4 py-1.5 rounded-full text-[8px] font-black transition-all ${lang === 'hr' ? 'bg-[#D4AF37] text-black' : 'text-zinc-500'}`}>HR</button>
         <button onClick={() => setLang('en')} className={`px-4 py-1.5 rounded-full text-[8px] font-black transition-all ${lang === 'en' ? 'bg-[#D4AF37] text-black' : 'text-zinc-600'}`}>EN</button>
       </div>
 
       <div className="w-full max-w-xs mt-12 pb-12">
-        <div className="flex flex-col items-center mb-12">
-           <h1 className="text-4xl font-black tracking-tighter italic uppercase text-white leading-none text-center">
+        <div className="flex flex-col items-center mb-8 text-center px-2">
+           <h1 className="text-3xl font-black tracking-tighter italic uppercase text-white leading-none">
              {forceUserEmail ? 'Dovršite Profil' : t.createAccount}
            </h1>
-           <p className="text-zinc-600 text-[9px] font-black uppercase tracking-[0.4em] mt-3 text-center">
+           <p className="text-zinc-600 text-[9px] font-black uppercase tracking-[0.3em] mt-3">
              {forceUserEmail ? 'Odaberite ili potvrdite ulogu' : t.joinNetwork}
            </p>
         </div>
 
-        <div className="flex bg-zinc-950 p-2 rounded-[2rem] border border-white/5 mb-8 shadow-2xl">
-           <button onClick={() => setRole('customer')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${role === 'customer' ? 'bg-[#D4AF37] text-black shadow-xl' : 'text-zinc-700'}`}>
+        <div className="flex bg-zinc-950 p-1.5 rounded-[2rem] border border-white/5 mb-8 shadow-2xl">
+           <button onClick={() => setRole('customer')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-1.5 ${role === 'customer' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>
              <UserIcon size={14} /> {t.client}
            </button>
-           <button onClick={() => setRole('barber')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${role === 'barber' ? 'bg-[#D4AF37] text-black shadow-xl' : 'text-zinc-700'}`}>
+           <button onClick={() => setRole('barber')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-1.5 ${role === 'barber' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>
              <Scissors size={14} /> {t.barber}
            </button>
         </div>
@@ -228,36 +224,25 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
            )}
            
            <div className="space-y-4">
-              <Input 
-                label={lang === 'hr' ? 'Pozivni kôd (opcionalno)' : 'Invite Code (optional)'} 
-                placeholder="KOD..." 
-                value={inviteCode} 
-                onChange={setInviteCode} 
-              />
-              <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 border border-white/5 rounded-2xl">
+              <Input label={lang === 'hr' ? 'Kôd (opcionalno)' : 'Code (optional)'} placeholder="KOD..." value={inviteCode} onChange={setInviteCode} />
+              <div className="flex items-center gap-3 px-5 py-4 bg-zinc-900 border border-white/5 rounded-2xl">
                  <Info size={14} className="text-zinc-500 shrink-0" />
                  <p className="text-[7px] font-black uppercase tracking-widest text-zinc-600 leading-tight">
-                   {lang === 'hr' 
-                     ? 'Barberi i Admini moraju unijeti kôd za aktivaciju uloge.' 
-                     : 'Barbers and Admins must enter a code to activate their role.'}
+                   Barberi i Admini moraju unijeti kôd za aktivaciju.
                  </p>
               </div>
            </div>
 
-           <Button type="submit" loading={loading} className="w-full h-20 text-xs font-black mt-2 shadow-2xl">
-             {forceUserEmail ? 'POTVRDI I UĐI' : t.signup}
+           <Button type="submit" loading={loading} className="w-full h-18 text-xs font-black shadow-2xl">
+             {forceUserEmail ? 'POTVRDI' : t.signup}
            </Button>
         </form>
 
-        <div className="mt-12 flex flex-col items-center gap-8">
+        <div className="mt-12 flex flex-col items-center gap-6">
           <p className="text-zinc-500 text-xs font-medium">
             {t.haveAccount} 
             <button onClick={onToggle} className="text-[#D4AF37] font-black uppercase tracking-wider text-[10px] ml-1">{t.login}</button>
           </p>
-          <div className="flex items-center gap-2 opacity-20">
-            <ShieldCheck size={12} />
-            <span className="text-[7px] font-black uppercase tracking-widest">Trimly Zagreb Secure</span>
-          </div>
         </div>
       </div>
     </div>

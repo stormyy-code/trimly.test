@@ -8,20 +8,21 @@ import { translations, Language } from '../../translations';
 import { Check, X, Wallet, Scissors, User as UserIcon, TrendingUp, CalendarDays, ShieldAlert, Bell, Loader2, Zap, AlertCircle } from 'lucide-react';
 import { APP_CONFIG } from '../../constants';
 
+// Added missing interface definition for BarberDashboardProps
 interface BarberDashboardProps {
   barberId: string;
   lang: Language;
 }
 
 const VelocityScale = ({ label, value, max }: { label: string, value: number, max: number }) => (
-  <div className="flex-1 flex flex-col items-center gap-3 min-w-0">
-    <div className="text-center space-y-0.5 w-full">
-      <span className="text-[7px] font-black text-[#C5A059] uppercase tracking-widest block w-full text-center truncate">{label}</span>
-      <span className="text-[11px] font-black text-white block w-full text-center truncate">{value}</span>
+  <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
+    <div className="text-center w-full min-w-0">
+      <span className="text-[7px] font-black text-[#C5A059] uppercase tracking-widest block truncate">{label}</span>
+      <span className="text-[10px] font-black text-white block truncate">{value}</span>
     </div>
-    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex gap-1 px-1">
+    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex gap-0.5 px-0.5">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className={`h-full flex-1 rounded-sm transition-all duration-1000 ${i < (value / (max/6 || 1)) ? 'bg-[#C5A059]' : 'bg-transparent'}`} />
+        <div key={i} className={`h-full flex-1 rounded-sm transition-all duration-1000 ${i < (value / (max/6 || 1)) ? 'bg-[#C5A059]' : 'bg-zinc-900'}`} />
       ))}
     </div>
   </div>
@@ -45,19 +46,13 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
   useEffect(() => {
     refreshAll();
-
     const handleSync = () => refreshAll();
     window.addEventListener('app-sync-complete', handleSync);
     window.addEventListener('user-profile-updated', handleSync);
     
     const channel = supabase
       .channel('barber-bookings-realtime')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'bookings', 
-        filter: `barber_id=eq.${barberId}` 
-      }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barber_id=eq.${barberId}` }, () => {
         refreshAll();
       })
       .subscribe();
@@ -95,118 +90,76 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
   const updateStatus = async (bookingId: string, status: Booking['status']) => {
     setIsUpdating(bookingId);
-    
     const currentBooking = db.getBookingsSync().find(b => b.id === bookingId);
     const result = await db.updateBookingStatus(bookingId, status);
     
     if (result.success) {
       if (status === 'accepted' && currentBooking) {
         const othersToReject = db.getBookingsSync().filter(b => 
-          b.id !== bookingId &&
-          b.barberId === barberId &&
-          b.date === currentBooking.date &&
-          b.time === currentBooking.time &&
-          b.status === 'pending'
+          b.id !== bookingId && b.barberId === barberId && b.date === currentBooking.date && b.time === currentBooking.time && b.status === 'pending'
         );
-
-        for (const b of othersToReject) {
-          await db.updateBookingStatus(b.id, 'rejected');
-        }
+        for (const b of othersToReject) await db.updateBookingStatus(b.id, 'rejected');
       }
-
-      setToast({ msg: status === 'accepted' ? 'Termin prihvaćen!' : 'Termin odbijen.', type: 'success' });
+      setToast({ msg: 'Ažurirano!', type: 'success' });
       await refreshAll();
     } else {
-      setToast({ msg: `Greška: ${result.error || 'Neuspjelo ažuriranje'}`, type: 'error' });
+      setToast({ msg: 'Greška!', type: 'error' });
     }
     setIsUpdating(null);
   };
 
   const renderBookingCard = (booking: Booking) => {
     const isCancelled = booking.status === 'cancelled';
-    
-    // UVIJEK tražimo najnovije ime iz tablice profila pomoću customerId-a
     const clientProfile = allProfiles.find(p => p.id === booking.customerId);
     const displayName = clientProfile?.fullName || booking.customerName || booking.customerEmail.split('@')[0];
     
     return (
-      <Card key={booking.id} className={`p-6 border-white/5 bg-zinc-950 rounded-[2.5rem] space-y-6 relative overflow-hidden shadow-2xl ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
+      <Card key={booking.id} className={`p-5 border-white/5 bg-zinc-950 rounded-[2rem] space-y-5 relative overflow-hidden ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
         {isUpdating === booking.id && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center">
             <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
           </div>
         )}
-        <div className="flex justify-between items-center gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className={`shrink-0 w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center border border-white/5 ${isCancelled ? 'text-red-500/50' : 'text-[#C5A059]'}`}>
-              {clientProfile?.avatarUrl ? (
-                <img src={clientProfile.avatarUrl} className="w-full h-full object-cover rounded-2xl" alt="" />
-              ) : (
-                <UserIcon size={24} />
-              )}
+        <div className="flex justify-between items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="shrink-0 w-12 h-12 bg-zinc-900 rounded-xl flex items-center justify-center border border-white/5 overflow-hidden">
+              {clientProfile?.avatarUrl ? <img src={clientProfile.avatarUrl} className="w-full h-full object-cover" /> : <UserIcon size={20} className="text-zinc-700" />}
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-sm text-white uppercase italic tracking-tighter leading-none truncate">{displayName}</h3>
-              <p className="text-[8px] text-zinc-600 font-black uppercase tracking-[0.2em] mt-2 truncate">{booking.serviceName}</p>
+              <h3 className="font-black text-xs text-white uppercase italic tracking-tighter leading-none truncate">{displayName}</h3>
+              <p className="text-[7px] text-zinc-600 font-black uppercase tracking-widest mt-1.5 truncate">{booking.serviceName}</p>
             </div>
           </div>
-          <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
-            <span className="block font-black text-2xl text-white italic tracking-tighter leading-none">{booking.price}€</span>
-            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[7px]">
-              {isCancelled ? (lang === 'hr' ? 'OTKAZANO' : 'CANCELLED') : booking.status}
+          <div className="text-right flex flex-col items-end gap-1.5 shrink-0 min-w-[60px]">
+            <span className="block font-black text-xl text-white italic tracking-tighter leading-none">{booking.price}€</span>
+            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[6px] px-2 py-1">
+              {booking.status}
             </Badge>
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-4 p-5 bg-black/40 rounded-3xl border border-white/[0.03]">
-          <div className="text-center space-y-1 min-w-0">
-            <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Datum</p>
-            <span className="text-[10px] font-black text-zinc-400 truncate">{booking.date}</span>
+        <div className="grid grid-cols-2 gap-3 p-4 bg-black/40 rounded-2xl border border-white/[0.03]">
+          <div className="text-center min-w-0">
+            <p className="text-[6px] text-zinc-700 font-black uppercase tracking-widest truncate">Datum</p>
+            <span className="text-[9px] font-black text-zinc-400 truncate block">{booking.date}</span>
           </div>
-          <div className="text-center border-l border-white/5 space-y-1 min-w-0">
-            <p className="text-[7px] text-zinc-700 font-black uppercase tracking-widest truncate">Vrijeme</p>
-            <span className="text-[10px] font-black text-zinc-400 truncate">{booking.time}h</span>
+          <div className="text-center border-l border-white/5 min-w-0">
+            <p className="text-[6px] text-zinc-700 font-black uppercase tracking-widest truncate">Vrijeme</p>
+            <span className="text-[9px] font-black text-zinc-400 truncate block">{booking.time}h</span>
           </div>
         </div>
 
         {!isCancelled && (
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             {booking.status === 'pending' && (
               <>
-                <button 
-                  disabled={!!isUpdating}
-                  className="flex-1 h-14 bg-zinc-800 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50" 
-                  onClick={() => updateStatus(booking.id, 'rejected')}
-                >
-                  {t.decline}
-                </button>
-                <Button 
-                  variant="primary" 
-                  disabled={!!isUpdating}
-                  className="flex-[2] h-14 text-[9px] uppercase font-black rounded-2xl shadow-2xl" 
-                  onClick={() => updateStatus(booking.id, 'accepted')}
-                >
-                  {t.accept}
-                </Button>
+                <button disabled={!!isUpdating} className="flex-1 h-12 bg-zinc-900 text-zinc-500 rounded-xl text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all" onClick={() => updateStatus(booking.id, 'rejected')}>{t.decline}</button>
+                <Button variant="primary" disabled={!!isUpdating} className="flex-[2] h-12 text-[8px] uppercase font-black rounded-xl" onClick={() => updateStatus(booking.id, 'accepted')}>{t.accept}</Button>
               </>
             )}
             {booking.status === 'accepted' && (
-              <Button 
-                variant="secondary" 
-                disabled={!!isUpdating}
-                className="w-full h-14 text-[9px] font-black uppercase rounded-2xl border-emerald-500/20 text-emerald-500" 
-                onClick={() => updateStatus(booking.id, 'completed')}
-              >
-                {t.finalizeCut}
-              </Button>
+              <Button variant="secondary" disabled={!!isUpdating} className="w-full h-12 text-[8px] font-black uppercase rounded-xl" onClick={() => updateStatus(booking.id, 'completed')}>{t.finalizeCut}</Button>
             )}
-          </div>
-        )}
-        
-        {isCancelled && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
-             <AlertCircle size={14} className="text-red-500" />
-             <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Ovaj termin je otkazan.</span>
           </div>
         )}
       </Card>
@@ -214,30 +167,25 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   };
 
   return (
-    <div className="space-y-8 pb-32 animate-lux-fade">
+    <div className="space-y-6 pb-32 animate-lux-fade overflow-x-hidden w-full max-w-full">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
-      <section className="bg-zinc-950 border border-white/10 p-10 rounded-[3rem] shadow-2xl flex flex-col items-center gap-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-4">
-           <Zap size={20} className="text-emerald-500 opacity-20" />
-        </div>
-        <div className="flex flex-col items-center gap-5 text-center w-full">
-          <div className="w-16 h-16 bg-emerald-500 rounded-[2rem] flex items-center justify-center shadow-[0_25px_50px_rgba(16,185,129,0.3)]">
-            <Wallet className="text-black" size={28} />
+      <section className="bg-zinc-950 border border-white/10 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-6 relative overflow-hidden mx-1">
+        <div className="flex flex-col items-center gap-4 text-center w-full">
+          <div className="w-14 h-14 bg-emerald-500 rounded-[1.5rem] flex items-center justify-center shadow-xl">
+            <Wallet className="text-black" size={24} />
           </div>
-          <div className="space-y-2 w-full min-w-0">
-            <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.4em] flex items-center justify-center gap-2 w-full text-center truncate">
-               {t.equity}
-            </p>
-            <h2 className="text-4xl xs:text-5xl font-black text-emerald-400 italic tracking-tighter leading-none w-full text-center break-words">{barberShare.toFixed(2)}€</h2>
+          <div className="space-y-1 w-full min-w-0">
+            <p className="text-emerald-500/60 text-[9px] font-black uppercase tracking-[0.4em] truncate">{t.equity}</p>
+            <h2 className="text-4xl font-black text-emerald-400 italic tracking-tighter leading-none truncate">{barberShare.toFixed(2)}€</h2>
           </div>
         </div>
-        <div className="w-full pt-8 border-t border-white/5 space-y-6 flex flex-col items-center">
-          <div className="flex items-center gap-2 w-full justify-center">
+        <div className="w-full pt-6 border-t border-white/5 flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2">
             <TrendingUp size={12} className="text-zinc-700" />
-            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em] text-center truncate">{t.efficiencyStats}</span>
+            <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Statistika rada</span>
           </div>
-          <div className="flex gap-4 xs:gap-8 w-full justify-center items-center">
+          <div className="flex gap-4 w-full">
             <VelocityScale label="Dan" value={stats.daily} max={10} />
             <VelocityScale label="Mjesec" value={stats.monthly} max={100} />
             <VelocityScale label="Godina" value={stats.yearly} max={1000} />
@@ -245,23 +193,23 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
         </div>
       </section>
 
-      <div className="flex bg-zinc-950 p-2 rounded-[2rem] border border-white/5 mx-1">
+      <div className="flex bg-zinc-950 p-1.5 rounded-[1.75rem] border border-white/5 mx-1">
         {(['pending', 'active', 'history'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all relative truncate ${activeTab === tab ? 'bg-white text-black shadow-2xl scale-100' : 'text-zinc-600 scale-95 opacity-60'}`}>
-            {tab === 'pending' ? 'Zahtjevi' : tab === 'active' ? 'Aktivno' : 'Povijest'} 
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-3.5 text-[7px] font-black uppercase tracking-widest rounded-xl transition-all relative truncate ${activeTab === tab ? 'bg-white text-black shadow-xl' : 'text-zinc-700'}`}>
+            {tab}
             {tab === 'pending' && pendingBookings.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shadow-xl border-2 border-black animate-bounce">{pendingBookings.length}</span>
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-black border-2 border-black animate-bounce">{pendingBookings.length}</span>
             )}
           </button>
         ))}
       </div>
 
-      <section className="space-y-6 px-1">
-        {activeTab === 'pending' && pendingBookings.length === 0 && <div className="py-24 text-center opacity-20 text-[10px] font-black uppercase tracking-widest italic w-full">Nema novih zahtjeva</div>}
+      <section className="space-y-4 px-1">
+        {activeTab === 'pending' && pendingBookings.length === 0 && <div className="py-20 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">Nema novih zahtjeva</div>}
         {activeTab === 'pending' && pendingBookings.map(renderBookingCard)}
-        {activeTab === 'active' && activeBookings.length === 0 && <div className="py-24 text-center opacity-20 text-[10px] font-black uppercase tracking-widest italic w-full">Nema aktivnih šišanja</div>}
+        {activeTab === 'active' && activeBookings.length === 0 && <div className="py-20 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">Nema aktivnih šišanja</div>}
         {activeTab === 'active' && activeBookings.map(renderBookingCard)}
-        {activeTab === 'history' && completedBookings.length === 0 && <div className="py-24 text-center opacity-20 text-[10px] font-black uppercase tracking-widest italic w-full">Povijest je prazna</div>}
+        {activeTab === 'history' && completedBookings.length === 0 && <div className="py-20 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">Povijest je prazna</div>}
         {activeTab === 'history' && completedBookings.map(renderBookingCard)}
       </section>
     </div>

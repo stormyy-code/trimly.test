@@ -109,20 +109,20 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
   };
 
   return (
-    <div className="space-y-8 animate-slide-up pb-12">
+    <div className="space-y-8 animate-slide-up pb-12 w-full max-w-full overflow-hidden">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 ios-shadow flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter leading-none">{t.services}</h2>
+      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-6 sm:p-8 border border-white/10 ios-shadow flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl sm:text-3xl font-black text-white italic uppercase tracking-tighter leading-none truncate">{t.services}</h2>
           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mt-2">Upravljanje ponudom</p>
         </div>
-        <button onClick={() => setIsAdding(!isAdding)} className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isAdding ? 'bg-red-500 text-white rotate-45' : 'bg-white text-black shadow-xl'}`}>
+        <button onClick={() => setIsAdding(!isAdding)} className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ml-4 ${isAdding ? 'bg-red-500 text-white rotate-45' : 'bg-white text-black shadow-xl'}`}>
           {isAdding ? <X size={28} /> : <Plus size={28} />}
         </button>
       </div>
 
       {isAdding && (
-        <Card className="p-8 space-y-6 border-white/10 animate-lux-fade bg-zinc-950">
+        <Card className="p-6 sm:p-8 space-y-6 border-white/10 animate-lux-fade bg-zinc-950">
           <div className="flex flex-col items-center gap-4">
             <div 
               onClick={() => !isUploading && fileInputRef.current?.click()}
@@ -158,33 +158,33 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
             </div>
           </div>
           
-          <Button className="w-full mt-4 h-18 text-xs shadow-2xl" onClick={handleAdd} loading={loading}>
+          <Button className="w-full mt-4 h-16 sm:h-18 text-xs shadow-2xl" onClick={handleAdd} loading={loading}>
             Spremi uslugu
           </Button>
         </Card>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-4 px-1">
         {services.length === 0 ? (
           <div className="py-24 text-center opacity-10 flex flex-col items-center gap-4">
              <Scissors size={48} />
              <p className="text-[10px] font-black uppercase tracking-[0.4em] italic">{t.noData}</p>
           </div>
         ) : services.map(service => (
-          <Card key={service.id} className="p-5 flex gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2.25rem]">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+          <Card key={service.id} className="p-4 sm:p-5 flex gap-4 sm:gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2rem] sm:rounded-[2.25rem]">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shrink-0">
                <SafeImage src={service.imageUrl || ''} className="" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-black text-white italic uppercase tracking-tighter truncate leading-none">{service.name}</h3>
-              <div className="flex items-center gap-3 mt-3">
+              <h3 className="text-base sm:text-lg font-black text-white italic uppercase tracking-tighter truncate leading-none">{service.name}</h3>
+              <div className="flex items-center gap-2 sm:gap-3 mt-2 sm:mt-3">
                 <span className="text-[#D4AF37] font-black text-sm">{service.price}€</span>
                 <span className="w-1 h-1 rounded-full bg-zinc-800"></span>
-                <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">{service.duration}</span>
+                <span className="text-zinc-600 text-[8px] sm:text-[9px] font-black uppercase tracking-widest truncate">{service.duration}</span>
               </div>
             </div>
-            <button onClick={() => handleDelete(service.id)} className="w-12 h-12 bg-red-500/10 text-red-500/40 hover:text-red-500 hover:bg-red-500/20 rounded-2xl flex items-center justify-center transition-all active:scale-90">
-              <Trash2 size={18} />
+            <button onClick={() => handleDelete(service.id)} className="w-10 h-10 sm:w-12 sm:h-12 bg-red-500/10 text-red-500/40 hover:text-red-500 hover:bg-red-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0">
+              <Trash2 size={16} />
             </button>
           </Card>
         ))}
