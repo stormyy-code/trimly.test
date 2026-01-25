@@ -132,20 +132,20 @@ const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ ba
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-6 sm:p-8 flex flex-col gap-6 border border-white/10 mx-1">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter leading-none">{t.schedule}</h2>
-          <Badge variant="gold">Aktivno</Badge>
+        <div className="flex justify-between items-center gap-2">
+          <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter leading-none truncate">{t.schedule}</h2>
+          <Badge variant="gold" className="shrink-0">Aktivno</Badge>
         </div>
         
-        <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-2xl border border-white/5">
-          <div className="flex flex-col min-w-0">
+        <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-2xl border border-white/5 gap-3">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest truncate">Novi termin svakih</span>
             <span className="text-xs font-black text-white italic truncate">{slotInterval} minuta</span>
           </div>
           <select 
             value={slotInterval} 
             onChange={(e) => setSlotInterval(Number(e.target.value))}
-            className="bg-zinc-900 border border-[#D4AF37]/30 rounded-xl px-3 sm:px-4 py-2 text-[10px] sm:text-[11px] font-black text-[#D4AF37] outline-none shadow-xl flex-shrink-0"
+            className="bg-zinc-900 border border-[#D4AF37]/30 rounded-xl px-2 xs:px-4 py-2 text-[10px] sm:text-[11px] font-black text-[#D4AF37] outline-none shadow-xl flex-shrink-0"
           >
             <option value={15}>15 min</option>
             <option value={30}>30 min</option>
@@ -166,81 +166,81 @@ const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ ba
 
       <div className="space-y-4 px-1">
         {workingHours.map((wh, idx) => (
-          <Card key={wh.day} className={`p-5 sm:p-6 border-white/5 transition-all ${wh.enabled ? 'bg-zinc-950 shadow-2xl scale-[1.01]' : 'bg-black opacity-30'}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Card key={wh.day} className={`p-4 xs:p-6 border-white/5 transition-all ${wh.enabled ? 'bg-zinc-950 shadow-2xl scale-[1.01]' : 'bg-black opacity-30'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 flex-1 min-w-0 overflow-hidden">
                 <button 
                   onClick={() => toggleDay(idx)} 
-                  className={`w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center transition-all ${wh.enabled ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20' : 'bg-zinc-900 text-zinc-700 border border-white/5'}`}
+                  className={`w-9 h-9 xs:w-10 xs:h-10 shrink-0 rounded-2xl flex items-center justify-center transition-all ${wh.enabled ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20' : 'bg-zinc-900 text-zinc-700 border border-white/5'}`}
                 >
-                  {wh.enabled ? <Check size={18} strokeWidth={3} /> : <X size={18} strokeWidth={3} />}
+                  {wh.enabled ? <Check size={16} strokeWidth={3} /> : <X size={16} strokeWidth={3} />}
                 </button>
                 <div className="flex flex-col min-w-0">
-                  <span className="font-black text-[13px] sm:text-sm uppercase italic tracking-tighter text-white truncate">
+                  <span className="font-black text-[11px] xs:text-sm uppercase italic tracking-tighter text-white truncate leading-none mb-1">
                     {dayTranslations[wh.day]}
                   </span>
-                  <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest truncate">
+                  <span className="text-[6.5px] xs:text-[7px] font-black text-zinc-600 uppercase tracking-widest truncate leading-none">
                     {wh.enabled ? 'Radni dan' : 'Neradni dan'}
                   </span>
                 </div>
               </div>
 
               {wh.enabled && (
-                <div className="flex items-center gap-1.5 shrink-0 bg-white/5 p-1 rounded-2xl border border-white/5">
+                <div className="flex items-center gap-1 shrink-0 bg-white/5 p-1 rounded-2xl border border-white/5">
                   <input 
                     type="time" 
                     value={wh.startTime} 
                     onChange={e => updateTime(idx, 'startTime', e.target.value)} 
-                    className="bg-transparent px-1.5 py-1.5 text-[10px] font-black text-[#D4AF37] outline-none w-[55px]" 
+                    className="bg-transparent px-1 py-1 text-[9px] xs:text-[10px] font-black text-[#D4AF37] outline-none w-[48px] xs:w-[55px]" 
                   />
-                  <div className="w-1.5 h-[1px] bg-zinc-800"></div>
+                  <div className="w-1 h-[1px] bg-zinc-800 shrink-0"></div>
                   <input 
                     type="time" 
                     value={wh.endTime} 
                     onChange={e => updateTime(idx, 'endTime', e.target.value)} 
-                    className="bg-transparent px-1.5 py-1.5 text-[10px] font-black text-[#D4AF37] outline-none w-[55px]" 
+                    className="bg-transparent px-1 py-1 text-[9px] xs:text-[10px] font-black text-[#D4AF37] outline-none w-[48px] xs:w-[55px]" 
                   />
                 </div>
               )}
             </div>
 
             {wh.enabled && (
-               <div className="mt-5 pt-5 border-t border-white/5 space-y-4">
-                  <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-2">
-                      <Clock size={12} className="text-zinc-600" />
-                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Dnevne pauze</span>
+               <div className="mt-4 pt-4 border-t border-white/5 space-y-4">
+                  <div className="flex items-center justify-between px-1 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Clock size={12} className="text-zinc-600 shrink-0" />
+                      <span className="text-[7.5px] xs:text-[8px] font-black text-zinc-600 uppercase tracking-widest truncate">Dnevne pauze</span>
                     </div>
-                    <button onClick={() => addBreak(idx)} className="text-[8.5px] font-black text-[#D4AF37] uppercase tracking-widest flex items-center gap-1.5 bg-[#D4AF37]/10 px-3 py-1.5 rounded-xl border border-[#D4AF37]/20 active:scale-95 transition-all">
-                      <Plus size={12} /> Dodaj
+                    <button onClick={() => addBreak(idx)} className="text-[7.5px] xs:text-[8.5px] font-black text-[#D4AF37] uppercase tracking-widest flex items-center gap-1 bg-[#D4AF37]/10 px-2.5 xs:px-3 py-1.5 rounded-xl border border-[#D4AF37]/20 active:scale-95 transition-all shrink-0">
+                      <Plus size={10} /> Dodaj
                     </button>
                   </div>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {wh.breaks?.map((b, bIdx) => (
-                      <div key={bIdx} className="flex gap-3 items-center animate-lux-fade bg-black/40 p-3 rounded-2xl border border-white/5">
-                        <div className="flex-1 flex gap-2 items-center">
+                      <div key={bIdx} className="flex gap-2 items-center animate-lux-fade bg-black/40 p-2.5 rounded-2xl border border-white/5">
+                        <div className="flex-1 flex gap-1.5 items-center">
                            <input 
                              type="time" 
                              value={b.startTime} 
                              onChange={e => updateBreakTime(idx, bIdx, 'startTime', e.target.value)}
-                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[10px] font-black text-zinc-400 w-full outline-none focus:border-[#D4AF37]/30" 
+                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[9px] xs:text-[10px] font-black text-zinc-400 w-full outline-none focus:border-[#D4AF37]/30" 
                            />
-                           <div className="w-3 h-px bg-zinc-800 shrink-0"></div>
+                           <div className="w-2 h-px bg-zinc-800 shrink-0"></div>
                            <input 
                              type="time" 
                              value={b.endTime} 
                              onChange={e => updateBreakTime(idx, bIdx, 'endTime', e.target.value)}
-                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[10px] font-black text-zinc-400 w-full outline-none focus:border-[#D4AF37]/30" 
+                             className="bg-zinc-900 border border-white/5 p-2 rounded-xl text-[9px] xs:text-[10px] font-black text-zinc-400 w-full outline-none focus:border-[#D4AF37]/30" 
                            />
                         </div>
-                        <button onClick={() => removeBreak(idx, bIdx)} className="w-9 h-9 flex items-center justify-center bg-red-500/10 text-red-500 rounded-xl active:scale-90 transition-all border border-red-500/10 flex-shrink-0">
-                          <Trash2 size={14} />
+                        <button onClick={() => removeBreak(idx, bIdx)} className="w-8 h-8 xs:w-9 xs:h-9 flex items-center justify-center bg-red-500/10 text-red-500 rounded-xl active:scale-90 transition-all border border-red-500/10 flex-shrink-0">
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     ))}
                     {(!wh.breaks || wh.breaks.length === 0) && (
-                      <p className="text-center text-[8px] font-black text-zinc-800 uppercase tracking-[0.3em] py-2 italic">Nema definiranih pauza</p>
+                      <p className="text-center text-[7px] xs:text-[8px] font-black text-zinc-800 uppercase tracking-[0.2em] py-2 italic">Nema definiranih pauza</p>
                     )}
                   </div>
                </div>
@@ -250,7 +250,7 @@ const BarberAvailability: React.FC<{ barberId: string, lang: Language }> = ({ ba
       </div>
 
       <div className="px-1 pt-6 pb-12">
-        <Button onClick={handleSave} loading={saveLoading} className="w-full h-18 text-xs font-black shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
+        <Button onClick={handleSave} loading={saveLoading} className="w-full h-16 xs:h-18 text-[10px] xs:text-xs font-black shadow-[0_25px_60px_rgba(212,175,55,0.2)]">
           Spremi i potvrdi raspored
         </Button>
       </div>

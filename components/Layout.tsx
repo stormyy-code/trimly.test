@@ -132,8 +132,8 @@ const Layout: React.FC<LayoutProps> = ({
       </main>
 
       {!hideShell && (
-        <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-2 z-50 pointer-events-none">
-          <nav className="pointer-events-auto w-full max-w-xl mx-auto bg-zinc-900/95 premium-blur rounded-[2rem] border border-white/10 flex justify-around items-center p-1.5 mb-safe ios-shadow animate-slide-up">
+        <div className="fixed bottom-0 left-0 right-0 px-2 pb-6 pt-2 z-50 pointer-events-none">
+          <nav className="pointer-events-auto w-full max-w-xl mx-auto bg-zinc-900/95 premium-blur rounded-[2.5rem] border border-white/10 flex justify-around items-center p-1 mb-safe ios-shadow animate-slide-up">
             {currentTabs.map((tab: any) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -141,17 +141,17 @@ const Layout: React.FC<LayoutProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => onTabChange(tab.id)}
-                  className={`flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all relative ${
+                  className={`flex-1 flex flex-col items-center gap-0.5 py-3 px-0.5 rounded-2xl transition-all relative ${
                     isActive ? 'text-[#D4AF37] bg-white/5' : 'text-zinc-600'
                   }`}
                 >
                   <div className="relative">
                     <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
                     {tab.notification && (
-                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-zinc-900 animate-pulse"></span>
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-zinc-900 animate-pulse"></span>
                     )}
                   </div>
-                  <span className={`text-[7px] font-black uppercase tracking-tight text-center px-1 leading-tight ${isActive ? 'opacity-100' : 'opacity-40'}`}>
+                  <span className={`text-[6px] xs:text-[7px] font-black uppercase tracking-tighter text-center leading-[1.1] ${isActive ? 'opacity-100' : 'opacity-40'}`}>
                     {tab.label}
                   </span>
                 </button>
