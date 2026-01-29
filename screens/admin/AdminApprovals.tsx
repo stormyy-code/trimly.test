@@ -5,7 +5,7 @@ import { supabase } from '../../store/supabase';
 import { BarberProfile } from '../../types';
 import { Card, Button, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Check, X, ShieldAlert, Loader2, RefreshCcw, Mail, Search } from 'lucide-react';
+import { Check, X, ShieldAlert, Loader2, RefreshCcw, Mail, Search, AlertTriangle } from 'lucide-react';
 
 interface AdminApprovalsProps {
   lang: Language;
@@ -15,13 +15,13 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
   const [pending, setPending] = useState<BarberProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejectConfirmBarber, setRejectConfirmBarber] = useState<BarberProfile | null>(null);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
   const t = translations[lang];
 
   const fetchPending = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
     try {
-      // Prisilno povlačenje svježih podataka s servera, preskačući cache
       const { data, error } = await supabase
         .from('barbers')
         .select('*')
@@ -64,7 +64,6 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
         schema: 'public', 
         table: 'barbers' 
       }, (payload) => {
-        // Ako je netko odobren, makni ga odmah
         if (payload.eventType === 'UPDATE' && payload.new.approved === true) {
           setPending(prev => prev.filter(p => p.id !== payload.new.id));
         } else if (payload.eventType === 'INSERT') {
@@ -84,7 +83,6 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
     
     try {
       if (approve) {
-        // 1. Odobri barbera
         const { error: barberError } = await supabase
           .from('barbers')
           .update({ approved: true })
@@ -92,34 +90,30 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
 
         if (barberError) throw barberError;
 
-        // 2. Osiguraj ulogu 'barber' u profilu
-        const { error: profileError } = await supabase
+        await supabase
           .from('profiles')
           .update({ role: 'barber' })
           .eq('id', barber.userId);
-
-        if (profileError) console.warn("Role sync failed, but barber approved.");
 
         setToast({ 
           msg: lang === 'hr' ? `Barber ${barber.fullName} je ODOBREN!` : `Barber ${barber.fullName} APPROVED!`, 
           type: 'success' 
         });
         
-        // Odmah makni iz lokalnog stanja
         setPending(prev => prev.filter(p => p.id !== barber.id));
       } else {
-        // Odbijanje (brisanje zahtjeva)
         const { error: deleteError } = await supabase.from('barbers').delete().eq('id', barber.id);
         if (deleteError) throw deleteError;
+        setToast({ msg: 'Zahtjev odbijen.', type: 'success' });
         setPending(prev => prev.filter(p => p.id !== barber.id));
       }
     } catch (err: any) {
       console.error("Action error:", err);
       setToast({ msg: `Baza javlja: ${err.message}`, type: 'error' });
-      // Ako ne uspije, osvježi listu da vratiš točno stanje
       fetchPending(false);
     } finally {
       setProcessingId(null);
+      setRejectConfirmBarber(null);
     }
   };
 
@@ -202,7 +196,7 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
               <div className="flex gap-4">
                 <button 
                   className="flex-1 h-14 rounded-xl border border-zinc-800 text-[9px] font-black uppercase tracking-widest text-zinc-500 active:bg-red-500/10 active:text-red-500 transition-colors" 
-                  onClick={() => handleAction(barber, false)}
+                  onClick={() => setRejectConfirmBarber(barber)}
                 >
                   <X size={16} className="inline mr-2" /> ODBIJ
                 </button>
@@ -216,6 +210,30 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Rejection Confirmation */}
+      {rejectConfirmBarber && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 animate-lux-fade">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !processingId && setRejectConfirmBarber(null)}></div>
+          <Card className="relative w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-[3rem] p-10 space-y-8 flex flex-col items-center text-center shadow-[0_50px_100px_rgba(0,0,0,1)]">
+            <AlertTriangle size={48} className="text-red-500" />
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Odbiti zahtjev?</h3>
+              <p className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest leading-loose">Zahtjev od {rejectConfirmBarber.fullName} će biti trajno izbrisan iz sustava odobrenja.</p>
+            </div>
+            <div className="flex flex-col w-full gap-3">
+              <Button variant="danger" className="h-16 w-full" onClick={() => handleAction(rejectConfirmBarber, false)} loading={processingId === rejectConfirmBarber.id}>Da, odbij</Button>
+              <button 
+                disabled={processingId === rejectConfirmBarber.id}
+                className="h-16 w-full text-zinc-500 text-[10px] font-black uppercase tracking-widest" 
+                onClick={() => setRejectConfirmBarber(null)}
+              >
+                Odustani
+              </button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

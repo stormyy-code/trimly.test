@@ -23,17 +23,40 @@ import LeaderboardScreen from './screens/shared/LeaderboardScreen';
 import { Loader2 } from 'lucide-react';
 import { Toast } from './components/UI';
 
+interface ToastItem {
+  id: string;
+  message: string;
+  type: 'success' | 'error';
+}
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [barberProfile, setBarberProfile] = useState<BarberProfile | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [lang, setLang] = useState<Language>('hr'); 
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
   
   const prevRoleRef = useRef<UserRole | null>(null);
+  const lastToastRef = useRef<{ msg: string, time: number }>({ msg: '', time: 0 });
+  const knownApprovalRef = useRef<boolean>(false);
+
+  const addToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const now = Date.now();
+    if (lastToastRef.current.msg === message && now - lastToastRef.current.time < 1000) {
+      return;
+    }
+    lastToastRef.current = { msg: message, time: now };
+
+    const id = Math.random().toString(36).substring(7);
+    setToasts(prev => [...prev, { id, message, type }]);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
 
   const syncAllData = useCallback(async (uId: string, uRole: string) => {
     try {
@@ -50,10 +73,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleAuthUser = useCallback(async (supabaseUser: any) => {
+  // Updated handleAuthUser to return Promise<User | null> and include return statements to match component onLogin prop expectations.
+  const handleAuthUser = useCallback(async (supabaseUser: any): Promise<User | null> => {
     setIsInitializing(true);
     try {
-      if (!supabaseUser) return;
+      if (!supabaseUser) return null;
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -67,7 +91,7 @@ const App: React.FC = () => {
         localStorage.setItem('trimly_partial_user', JSON.stringify({id: supabaseUser.id, email: supabaseUser.email}));
         setUser(null);
         setIsInitializing(false);
-        return;
+        return null;
       }
 
       localStorage.removeItem('trimly_partial_user');
@@ -102,12 +126,17 @@ const App: React.FC = () => {
         const barbers = await db.getBarbers();
         const bProf = barbers.find(b => b.userId === fullUser.id);
         setBarberProfile(bProf || null);
+        knownApprovalRef.current = bProf?.approved || false;
       }
+      return fullUser;
     } catch (err: any) {
       console.error("Auth Critical Error:", err);
       if (supabaseUser && supabaseUser.id) {
-         setUser({ id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' });
+         const fallbackUser: User = { id: supabaseUser.id, email: supabaseUser.email || '', role: 'customer' };
+         setUser(fallbackUser);
+         return fallbackUser;
       }
+      return null;
     } finally {
       setIsInitializing(false);
     }
@@ -131,11 +160,11 @@ const App: React.FC = () => {
 
         if (status !== oldStatus) {
            if (user.role === 'customer') {
-              if (status === 'accepted') setToast({ message: 'Termin prihvaćen! 🎉', type: 'success' });
-              if (status === 'rejected') setToast({ message: 'Nažalost, termin je odbijen.', type: 'error' });
+              if (status === 'accepted') addToast('Termin prihvaćen! 🎉', 'success');
+              if (status === 'rejected') addToast('Nažalost, termin je odbijen.', 'error');
            } else {
-              if (status === 'pending') setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
-              if (status === 'cancelled') setToast({ message: 'Klijent je otkazao termin.', type: 'error' });
+              if (status === 'pending') addToast('Novi zahtjev za šišanje! ✂️', 'success');
+              if (status === 'cancelled') addToast('Klijent je otkazao termin.', 'error');
            }
            db.getBookings(user.id, user.role);
         }
@@ -147,7 +176,7 @@ const App: React.FC = () => {
         filter: `${column}=eq.${user.id}`
       }, () => {
         if (user.role === 'barber') {
-           setToast({ message: 'Novi zahtjev za šišanje! ✂️', type: 'success' });
+           addToast('Novi zahtjev za šišanje! ✂️', 'success');
            db.getBookings(user.id, user.role);
         }
       })
@@ -156,7 +185,7 @@ const App: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, addToast]);
 
   useEffect(() => {
     const handleProfileUpdate = () => {
@@ -174,26 +203,33 @@ const App: React.FC = () => {
     if (!user || user.role !== 'barber') return;
 
     const channel = supabase
-      .channel(`barber-approval-${user.id}`)
+      .channel(`barber-approval-monitor-${user.id}`)
       .on('postgres_changes', { 
         event: 'UPDATE', 
         schema: 'public', 
         table: 'barbers', 
         filter: `user_id=eq.${user.id}` 
       }, async (payload) => {
-        if (payload.new && payload.new.approved === true) {
-          const barbers = await db.getBarbers();
-          const bProf = barbers.find(b => b.userId === user.id);
-          setBarberProfile(bProf || null);
-          setToast({ message: "Vaš profil je odobren!", type: 'success' });
+        const isNowApproved = payload.new?.approved === true;
+
+        // Ključna logika: Toast šaljemo samo ako 'knownApprovalRef' kaže da profil NISMO znali kao odobren
+        if (isNowApproved && !knownApprovalRef.current) {
+          knownApprovalRef.current = true; // Odmah označi kao poznato odobreno
+          addToast("Vaš profil je odobren! 🎉", "success");
         }
+        
+        // Sinkronizacija profila bez obzira na toast
+        const barbers = await db.getBarbers();
+        const bProf = barbers.find(b => b.userId === user.id);
+        setBarberProfile(bProf || null);
+        if (bProf) knownApprovalRef.current = bProf.approved;
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, addToast]);
 
   useEffect(() => {
     let mounted = true;
@@ -219,6 +255,7 @@ const App: React.FC = () => {
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setBarberProfile(null);
+        knownApprovalRef.current = false;
         setIsInitializing(false);
         localStorage.removeItem('trimly_active_user');
         localStorage.removeItem('trimly_partial_user');
@@ -236,6 +273,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setUser(null);
     setBarberProfile(null);
+    knownApprovalRef.current = false;
     setActiveTab('home');
     setIsInitializing(false);
   };
@@ -285,10 +323,12 @@ const App: React.FC = () => {
 
     if (user.role === 'barber') {
       if (!barberProfile) {
-        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email})} onLogout={handleLogout} />;
+        // Fix: Added block statement to onComplete callback to ensure it returns void.
+        return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => { handleAuthUser({id: user.id, email: user.email}); }} onLogout={handleLogout} />;
       }
       if (!barberProfile.approved) {
-        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={() => handleAuthUser({id: user.id, email: user.email})} />;
+        // Fix: Added async wrapper to onRefresh to ensure it returns Promise<void>, fixing the type mismatch.
+        return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={async () => { await handleAuthUser({id: user.id, email: user.email}); }} />;
       }
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
@@ -329,7 +369,12 @@ const App: React.FC = () => {
       ) : (
         renderView()
       )}
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      <div className="fixed top-12 left-4 right-4 z-[999] flex flex-col gap-3 pointer-events-none">
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
+        ))}
+      </div>
     </div>
   );
 };

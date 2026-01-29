@@ -126,7 +126,7 @@ const Layout: React.FC<LayoutProps> = ({
       )}
 
       <main className={`flex-1 overflow-y-auto scroll-smooth ${!hideShell ? 'pb-32 px-5 pt-6' : ''} animate-lux-fade scrollbar-hide`}>
-        <div className="w-full h-full max-w-2xl mx-auto">
+        <div className="w-full min-h-full max-w-2xl mx-auto">
           {children}
         </div>
       </main>

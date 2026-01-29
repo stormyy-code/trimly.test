@@ -5,7 +5,7 @@ import { StorageService } from '../../services/StorageService';
 import { Service } from '../../types';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast } from '../../components/UI';
-import { Plus, Trash2, Camera, Loader2, X, Scissors, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Camera, Loader2, X, Scissors, AlertTriangle } from 'lucide-react';
 
 interface BarberServicesProps {
   barberId: string;
@@ -23,6 +23,8 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [loading, setLoading] = useState(false);
+  const [itemActionLoading, setItemActionLoading] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = translations[lang];
@@ -81,17 +83,26 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
       setImageUrl('');
       setIsAdding(false);
     } else {
-      setToast({ msg: `Baza javlja: ${result.error || 'Nepoznata greška'}`, type: 'error' });
+      setToast({ msg: `Greška: ${result.error || 'Neuspjelo dodavanje'}`, type: 'error' });
     }
     setLoading(false);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Obrisati uslugu?')) return;
-    const success = await db.deleteService(id);
-    if (success) {
-      setToast({ msg: 'Usluga obrisana.', type: 'success' });
-      fetchServices();
+    setItemActionLoading(id);
+    try {
+      const result = await db.deleteService(id);
+      if (result.success) {
+        setToast({ msg: 'Usluga obrisana.', type: 'success' });
+        await fetchServices();
+      } else {
+        setToast({ msg: result.error || 'Baza odbila brisanje.', type: 'error' });
+      }
+    } catch (err: any) {
+      setToast({ msg: 'Sistemska greška.', type: 'error' });
+    } finally {
+      setItemActionLoading(null);
+      setDeleteConfirmId(null);
     }
   };
 
@@ -111,6 +122,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
   return (
     <div className="space-y-8 animate-slide-up pb-12 w-full max-w-full overflow-hidden">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+      
       <div className="premium-blur bg-white/5 rounded-[2.5rem] p-6 sm:p-8 border border-white/10 ios-shadow flex items-center justify-between">
         <div className="min-w-0 flex-1">
           <h2 className="text-2xl sm:text-3xl font-black text-white italic uppercase tracking-tighter leading-none truncate">{t.services}</h2>
@@ -138,7 +150,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
               ) : isUploading ? (
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
-                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.3em]">Uploading...</span>
+                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-[0.3em]">Učitavanje...</span>
                 </div>
               ) : (
                 <>
@@ -171,7 +183,7 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
              <p className="text-[10px] font-black uppercase tracking-[0.4em] italic">{t.noData}</p>
           </div>
         ) : services.map(service => (
-          <Card key={service.id} className="p-4 sm:p-5 flex gap-4 sm:gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2rem] sm:rounded-[2.25rem]">
+          <Card key={service.id} className={`p-4 sm:p-5 flex gap-4 sm:gap-6 items-center group bg-zinc-950 border-white/5 relative overflow-hidden rounded-[2rem] sm:rounded-[2.25rem] transition-all ${itemActionLoading === service.id ? 'opacity-40 grayscale pointer-events-none scale-95' : ''}`}>
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shrink-0">
                <SafeImage src={service.imageUrl || ''} className="" />
             </div>
@@ -183,12 +195,40 @@ const BarberServices: React.FC<BarberServicesProps> = ({ barberId, lang }) => {
                 <span className="text-zinc-600 text-[8px] sm:text-[9px] font-black uppercase tracking-widest truncate">{service.duration}</span>
               </div>
             </div>
-            <button onClick={() => handleDelete(service.id)} className="w-10 h-10 sm:w-12 sm:h-12 bg-red-500/10 text-red-500/40 hover:text-red-500 hover:bg-red-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0">
-              <Trash2 size={16} />
+            <button 
+              disabled={!!itemActionLoading}
+              onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(service.id); }} 
+              className="w-10 h-10 sm:w-12 sm:h-12 bg-red-500/10 text-red-500/40 hover:text-red-500 hover:bg-red-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all active:scale-90 flex-shrink-0"
+            >
+              {itemActionLoading === service.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
             </button>
           </Card>
         ))}
       </div>
+
+      {/* Custom Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 animate-lux-fade">
+          <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !itemActionLoading && setDeleteConfirmId(null)}></div>
+          <Card className="relative w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-[3rem] p-10 space-y-8 flex flex-col items-center text-center shadow-[0_50px_100px_rgba(0,0,0,1)]">
+            <AlertTriangle size={48} className="text-red-500" />
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Obrisati uslugu?</h3>
+              <p className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest leading-loose">Ova radnja je trajna. Usluga će biti uklonjena iz vaše ponude.</p>
+            </div>
+            <div className="flex flex-col w-full gap-3">
+              <Button variant="danger" className="h-16 w-full" onClick={() => handleDelete(deleteConfirmId)} loading={itemActionLoading === deleteConfirmId}>Da, obriši</Button>
+              <button 
+                disabled={itemActionLoading === deleteConfirmId}
+                className="h-16 w-full text-zinc-500 text-[10px] font-black uppercase tracking-widest" 
+                onClick={() => setDeleteConfirmId(null)}
+              >
+                Odustani
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

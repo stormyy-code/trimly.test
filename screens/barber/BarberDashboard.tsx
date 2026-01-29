@@ -70,7 +70,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
     const pending = rawBookings.filter(b => b.status === 'pending');
     const active = rawBookings.filter(b => b.status === 'accepted');
-    const history = rawBookings.filter(b => b.status === 'completed' || b.status === 'rejected' || b.status === 'cancelled');
+    const history = rawBookings.filter(b => ['completed', 'rejected', 'cancelled'].includes(b.status));
 
     const todayStr = new Date().toISOString().split('T')[0];
     const completed = rawBookings.filter(b => b.status === 'completed');
@@ -87,19 +87,29 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
     return { pendingBookings: pending, activeBookings: active, completedBookings: history, stats: velocity, barberShare: share };
   }, [barberId, refreshTrigger]);
 
-  const updateStatus = async (bookingId: string, status: Booking['status']) => {
-    setIsUpdating(bookingId);
-    const currentBooking = db.getBookingsSync().find(b => b.id === bookingId);
-    const result = await db.updateBookingStatus(bookingId, status);
+  const updateStatus = async (booking: Booking, status: Booking['status']) => {
+    setIsUpdating(booking.id);
+    
+    // 1. Ažuriramo odabrani termin
+    const result = await db.updateBookingStatus(booking.id, status);
     
     if (result.success) {
-      if (status === 'accepted' && currentBooking) {
-        const othersToReject = db.getBookingsSync().filter(b => 
-          b.id !== bookingId && b.barberId === barberId && b.date === currentBooking.date && b.time === currentBooking.time && b.status === 'pending'
+      // 2. AKO JE PRIHVAĆEN: Automatski odbijamo sve ostale koji su u istom slotu
+      if (status === 'accepted') {
+        const collisions = pendingBookings.filter(b => 
+          b.id !== booking.id && 
+          b.date === booking.date && 
+          b.time === booking.time
         );
-        for (const b of othersToReject) await db.updateBookingStatus(b.id, 'rejected');
+
+        for (const coll of collisions) {
+          await db.updateBookingStatus(coll.id, 'rejected');
+        }
+        
+        setToast({ msg: lang === 'hr' ? 'Termin potvrđen! Ostali zahtjevi su odbijeni.' : 'Appointment confirmed! Others auto-rejected.', type: 'success' });
+      } else {
+        setToast({ msg: 'Ažurirano!', type: 'success' });
       }
-      setToast({ msg: 'Ažurirano!', type: 'success' });
       await refreshAll();
     } else {
       setToast({ msg: 'Greška!', type: 'error' });
@@ -113,7 +123,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
     const displayName = clientProfile?.fullName || booking.customerName || booking.customerEmail.split('@')[0];
     
     return (
-      <Card key={booking.id} className={`p-4 xs:p-5 border-white/5 bg-zinc-950 rounded-[2rem] space-y-4 relative overflow-hidden ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
+      <Card key={booking.id} className={`p-4 xs:p-5 border-white/5 bg-zinc-950 rounded-[2rem] space-y-4 relative overflow-hidden ${isCancelled ? 'opacity-60 grayscale border-red-500/20 bg-red-500/5' : ''}`}>
         {isUpdating === booking.id && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center">
             <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
@@ -131,8 +141,8 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
           </div>
           <div className="text-right flex flex-col items-end gap-1 shrink-0 min-w-[50px]">
             <span className="block font-black text-base xs:text-lg text-white italic tracking-tighter leading-none">{booking.price}€</span>
-            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[6px] px-1 py-0.5">
-              {booking.status}
+            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[6px] px-2 py-0.5">
+              {isCancelled ? 'OTKAZANO' : booking.status.toUpperCase()}
             </Badge>
           </div>
         </div>
@@ -148,16 +158,16 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
           </div>
         </div>
 
-        {!isCancelled && (
+        {!isCancelled && booking.status !== 'completed' && booking.status !== 'rejected' && (
           <div className="flex gap-2">
             {booking.status === 'pending' && (
               <>
-                <button disabled={!!isUpdating} className="flex-1 h-10 xs:h-11 bg-zinc-900 text-zinc-500 rounded-xl text-[7px] font-black uppercase tracking-widest active:scale-95 transition-all truncate" onClick={() => updateStatus(booking.id, 'rejected')}>{t.decline}</button>
-                <Button variant="primary" disabled={!!isUpdating} className="flex-[2] h-10 xs:h-11 text-[7px] uppercase font-black rounded-xl px-0" onClick={() => updateStatus(booking.id, 'accepted')}>{t.accept}</Button>
+                <button disabled={!!isUpdating} className="flex-1 h-10 xs:h-11 bg-zinc-900 text-zinc-500 rounded-xl text-[7px] font-black uppercase tracking-widest active:scale-95 transition-all truncate" onClick={() => updateStatus(booking, 'rejected')}>{t.decline}</button>
+                <Button variant="primary" disabled={!!isUpdating} className="flex-[2] h-10 xs:h-11 text-[7px] uppercase font-black rounded-xl px-0" onClick={() => updateStatus(booking, 'accepted')}>{t.accept}</Button>
               </>
             )}
             {booking.status === 'accepted' && (
-              <Button variant="secondary" disabled={!!isUpdating} className="w-full h-10 xs:h-11 text-[7px] font-black uppercase rounded-xl px-0" onClick={() => updateStatus(booking.id, 'completed')}>{t.finalizeCut}</Button>
+              <Button variant="secondary" disabled={!!isUpdating} className="w-full h-10 xs:h-11 text-[7px] font-black uppercase rounded-xl px-0" onClick={() => updateStatus(booking, 'completed')}>{t.finalizeCut}</Button>
             )}
           </div>
         )}
@@ -195,7 +205,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
       <div className="flex bg-zinc-950 p-1 rounded-[1.75rem] border border-white/5 mx-0.5">
         {(['pending', 'active', 'history'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-3 text-[7px] xs:text-[7.5px] font-black uppercase tracking-wider rounded-xl transition-all relative truncate ${activeTab === tab ? 'bg-white text-black shadow-xl' : 'text-zinc-700'}`}>
-            {tab}
+            {tab === 'pending' ? 'Zahtjevi' : tab === 'active' ? 'Prihvaćeno' : 'Povijest'}
             {tab === 'pending' && pendingBookings.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-red-500 text-white w-3 h-3 xs:w-3.5 xs:h-3.5 rounded-full flex items-center justify-center text-[6px] xs:text-[7px] font-black border-2 border-black animate-bounce">{pendingBookings.length}</span>
             )}

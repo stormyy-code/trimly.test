@@ -67,20 +67,22 @@ export const Toast: React.FC<{
   onClose: () => void;
 }> = ({ message, type = 'success', onClose }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
   return (
-    <div className="fixed top-12 left-4 right-4 z-[999] animate-lux-fade">
-      <div className={`p-4 rounded-xl flex items-center justify-between border premium-blur ios-shadow ${
-        type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'
+    <div className="w-full animate-lux-fade pointer-events-auto">
+      <div className={`p-4 rounded-2xl flex items-center justify-between border premium-blur ios-shadow ${
+        type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_10px_30px_rgba(16,185,129,0.1)]' : 'bg-red-500/10 border-red-500/20 shadow-[0_10px_30px_rgba(239,68,68,0.1)]'
       }`}>
         <div className="flex items-center gap-3 min-w-0">
-          {type === 'success' ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0" /> : <AlertCircle size={16} className="text-red-500 shrink-0" />}
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${type === 'success' ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
+            {type === 'success' ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-500" />}
+          </div>
           <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none truncate">{message}</span>
         </div>
-        <button onClick={onClose} className="text-zinc-600 active:scale-90 transition-all shrink-0"><X size={14} /></button>
+        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-zinc-600 active:scale-90 transition-all shrink-0"><X size={14} /></button>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { translations, Language } from '../../translations';
 import { User as UserIcon, Scissors, Info, Loader2, AlertTriangle, ShieldCheck, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 interface RegisterScreenProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: any) => Promise<User | null>;
   onToggle: () => void;
   lang: Language;
   setLang: (l: Language) => void;
@@ -150,7 +150,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
             {otp.map((digit, i) => (
               <input
                 key={i}
-                ref={(el) => (otpRefs.current[i] = el)}
+                // Updated ref callback to use block statement, preventing return of assigned value.
+                ref={(el) => { otpRefs.current[i] = el; }}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
