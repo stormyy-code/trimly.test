@@ -4,7 +4,7 @@ import { supabase } from '../../store/supabase';
 import { User } from '../../types';
 import { Button, Input, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ShieldCheck, ArrowLeft, Mail, AlertTriangle, Info, Settings, Copy, Check } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, Mail, AlertTriangle, Info, Settings, Copy, Check, Lock } from 'lucide-react';
 import Logo from '../../components/Logo';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -44,8 +44,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
       if (authError) {
         if (authError.message.includes('Email not confirmed')) {
           setError(lang === 'hr' 
-            ? 'Email nije potvrđen! Ugasite "Confirm email" u Supabase Dashboardu (Sign In / Providers) za lakši rad.' 
-            : 'Email not confirmed! Disable "Confirm email" in Supabase Dashboard to skip this check.');
+            ? 'Email nije potvrđen! Provjerite kôd u mailu ili ugasite "Confirm email" u Supabaseu.' 
+            : 'Email not confirmed! Check your email code or disable "Confirm email" in Supabase.');
           setLoading(false);
           return;
         }
@@ -67,7 +67,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
     setLoading(true);
     setError('');
     
-    // Ovo je URL na koji Supabase mora vratiti korisnika
     const redirectUrl = window.location.origin;
     
     try {
@@ -76,14 +75,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
       });
 
       if (resetError) {
-        if (resetError.status === 429 || resetError.message.includes('rate limit')) {
-          const msg = lang === 'hr' 
-            ? 'Dosegnut limit. Isključite "Confirm email" ili postavite SMTP u Supabaseu.' 
-            : 'Rate limit hit. Disable "Confirm email" or set up SMTP in Supabase.';
-          setError(msg);
-          setToast({ msg, type: 'error' });
-          return;
-        }
         throw resetError;
       }
 
@@ -95,7 +86,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
       setTimeout(() => setMode('login'), 3000);
     } catch (err: any) {
       setError(err.message || "Greška pri slanju.");
-      setToast({ msg: err.message, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -130,33 +120,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
             )}
             <Input label={t.email} placeholder="name@email.com" type="email" value={email} onChange={setEmail} required />
             <Button type="submit" loading={loading} className="h-16 shadow-2xl">{t.sendResetLink}</Button>
-            
-            <div className="p-6 bg-zinc-900/50 rounded-3xl border border-white/5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[#D4AF37]">
-                  <Settings size={14} />
-                  <span className="text-[9px] font-black uppercase tracking-widest">Podešavanje Supabase-a</span>
-                </div>
-              </div>
-              
-              <p className="text-[8px] text-zinc-500 leading-relaxed uppercase font-bold">
-                Da bi link iz maila radio, u Supabase <span className="text-white">"URL Configuration"</span> kopirajte ovo:
-              </p>
-
-              <div 
-                onClick={() => copyToClipboard(window.location.origin)}
-                className="bg-black border border-white/10 rounded-xl p-3 flex items-center justify-between cursor-pointer active:scale-95 transition-all group"
-              >
-                <code className="text-[10px] text-emerald-400 lowercase truncate max-w-[200px]">{window.location.origin}</code>
-                {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-zinc-700 group-hover:text-white transition-colors" />}
-              </div>
-
-              <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
-                <p className="text-[7px] text-amber-500 leading-tight uppercase font-black italic">
-                  Link u mailu trenutno ne radi jer Supabase misli da je vaša stranica na drugoj adresi. Popravite to u "Site URL" postavkama.
-                </p>
-              </div>
-            </div>
           </form>
         </div>
       </div>
@@ -185,7 +148,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onToggle, lang, setL
         </div>
 
         <form onSubmit={handleLogin} className="flex flex-col gap-6 w-full animate-slide-up">
-          {error && <div className="p-4 rounded-xl text-[8px] font-black border text-center tracking-widest uppercase bg-red-500/10 border-red-500/20 text-red-500">{error}</div>}
+          {error && (
+            <div className="p-4 rounded-xl text-[8px] font-black border text-center tracking-widest uppercase bg-red-500/10 border-red-500/20 text-red-500">
+              {error}
+              {error.includes('confirmed') && (
+                <button 
+                  type="button" 
+                  onClick={onToggle} 
+                  className="block w-full mt-2 text-[#D4AF37] underline"
+                >
+                  Unesi kôd sada
+                </button>
+              )}
+            </div>
+          )}
           <div className="space-y-4">
             <Input label={t.email} placeholder="name@email.com" value={email} onChange={setEmail} required />
             <div className="space-y-2">

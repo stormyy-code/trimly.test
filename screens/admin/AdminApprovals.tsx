@@ -25,7 +25,7 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
       const { data, error } = await supabase
         .from('barbers')
         .select('*')
-        .or('approved.eq.false,approved.is.null')
+        .eq('approved', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -48,7 +48,7 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
       setPending(mapped);
     } catch (err: any) {
       console.error("Fetch pending error:", err);
-      setToast({ msg: lang === 'hr' ? 'Greška pri sinkronizaciji s bazom.' : 'Database sync error.', type: 'error' });
+      setToast({ msg: lang === 'hr' ? 'Greška pri sinkronizaciji.' : 'Sync error.', type: 'error' });
     } finally {
       if (showLoader) setLoading(false);
     }
@@ -63,12 +63,8 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
         event: '*', 
         schema: 'public', 
         table: 'barbers' 
-      }, (payload) => {
-        if (payload.eventType === 'UPDATE' && payload.new.approved === true) {
-          setPending(prev => prev.filter(p => p.id !== payload.new.id));
-        } else if (payload.eventType === 'INSERT') {
-          fetchPending(false);
-        }
+      }, () => {
+        fetchPending(false);
       })
       .subscribe();
 
@@ -83,24 +79,16 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
     
     try {
       if (approve) {
-        const { error: barberError } = await supabase
-          .from('barbers')
-          .update({ approved: true })
-          .eq('id', barber.id);
-
-        if (barberError) throw barberError;
-
-        await supabase
-          .from('profiles')
-          .update({ role: 'barber' })
-          .eq('id', barber.userId);
-
-        setToast({ 
-          msg: lang === 'hr' ? `Barber ${barber.fullName} je ODOBREN!` : `Barber ${barber.fullName} APPROVED!`, 
-          type: 'success' 
-        });
-        
-        setPending(prev => prev.filter(p => p.id !== barber.id));
+        const result = await db.approveBarber(barber.id, barber.userId);
+        if (result.success) {
+          setToast({ 
+            msg: lang === 'hr' ? `Barber ${barber.fullName} je ODOBREN!` : `Barber ${barber.fullName} APPROVED!`, 
+            type: 'success' 
+          });
+          setPending(prev => prev.filter(p => p.id !== barber.id));
+        } else {
+          throw new Error(result.error);
+        }
       } else {
         const { error: deleteError } = await supabase.from('barbers').delete().eq('id', barber.id);
         if (deleteError) throw deleteError;
@@ -109,7 +97,7 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
       }
     } catch (err: any) {
       console.error("Action error:", err);
-      setToast({ msg: `Baza javlja: ${err.message}`, type: 'error' });
+      setToast({ msg: `Greška: ${err.message}`, type: 'error' });
       fetchPending(false);
     } finally {
       setProcessingId(null);
@@ -213,7 +201,6 @@ const AdminApprovals: React.FC<AdminApprovalsProps> = ({ lang }) => {
         </div>
       )}
 
-      {/* Rejection Confirmation */}
       {rejectConfirmBarber && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 animate-lux-fade">
           <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !processingId && setRejectConfirmBarber(null)}></div>

@@ -14,7 +14,8 @@ interface AdminBarbersProps {
 
 const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => {
   const [confirmDelete, setConfirmDelete] = useState<{ bId: string, uId: string, name: string } | null>(null);
-  const [allUsers, setAllUsers] = useState<User[]>(db.getUsersSync());
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [allBarbers, setAllBarbers] = useState<BarberProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
@@ -23,9 +24,12 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const users = await db.getUsers();
+      const [users, barbers] = await Promise.all([
+        db.getUsers(),
+        db.getBarbers()
+      ]);
       setAllUsers(users);
-      await db.getBarbers();
+      setAllBarbers(barbers);
     } catch (err) {}
     setLoading(false);
   };
@@ -33,41 +37,44 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
   useEffect(() => {
     fetchData();
 
-    const handleRegistryUpdate = (e: any) => {
-      const { userId, banned } = e.detail || {};
-      if (userId) {
-        setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, banned } : u));
-      }
+    const handleRegistryUpdate = () => {
+      fetchData();
     };
 
     window.addEventListener('users-registry-updated', handleRegistryUpdate);
-    return () => window.removeEventListener('users-registry-updated', handleRegistryUpdate);
+    window.addEventListener('app-sync-complete', handleRegistryUpdate);
+    
+    return () => {
+      window.removeEventListener('users-registry-updated', handleRegistryUpdate);
+      window.removeEventListener('app-sync-complete', handleRegistryUpdate);
+    };
   }, []);
 
-  const rawBarbers = db.getBarbersSync();
-
   const activeBarbers = useMemo(() => {
-    return rawBarbers.filter(barber => {
+    return allBarbers.filter(barber => {
       const u = allUsers.find(u => u.id === barber.userId);
       return u && u.banned !== true && barber.approved === true;
     });
-  }, [allUsers, rawBarbers]);
+  }, [allUsers, allBarbers]);
 
   const bannedBarbers = useMemo(() => {
     return allUsers
-      .filter(u => u.banned === true && (u.role === 'barber' || rawBarbers.some(b => b.userId === u.id)))
+      .filter(u => u.banned === true && (u.role === 'barber' || allBarbers.some(b => b.userId === u.id)))
       .map(u => {
-        const profile = rawBarbers.find(b => b.userId === u.id);
+        const profile = allBarbers.find(b => b.userId === u.id);
         return { user: u, profile };
       });
-  }, [allUsers, rawBarbers]);
+  }, [allUsers, allBarbers]);
 
   const toggleFeatured = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const barber = rawBarbers.find(b => b.id === id);
+    const barber = allBarbers.find(b => b.id === id);
     if (barber) {
       const success = await db.saveBarbers({ ...barber, featured: !barber.featured });
-      if (success) setToast({ msg: t.done, type: 'success' });
+      if (success) {
+        setToast({ msg: t.done, type: 'success' });
+        fetchData();
+      }
     }
   };
 
@@ -83,6 +90,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
     if (result.success) {
       setToast({ msg: 'Licenca uspješno oduzeta.', type: 'success' });
       setConfirmDelete(null);
+      fetchData();
     } else {
       setToast({ msg: result.error || 'Greška', type: 'error' });
     }
@@ -94,6 +102,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
     const result = await db.setUserBanStatus(userId, false);
     if (result.success) {
       setToast({ msg: 'Licenca vraćena.', type: 'success' });
+      fetchData();
     }
     setActionLoading(false);
   };
@@ -129,7 +138,12 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
         </div>
 
         <div className="space-y-4 px-1">
-          {activeBarbers.length === 0 ? (
+          {loading && activeBarbers.length === 0 ? (
+            <div className="py-20 flex flex-col items-center gap-4">
+              <Loader2 className="animate-spin text-[#D4AF37]" size={32} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700">Osvježavanje liste...</span>
+            </div>
+          ) : activeBarbers.length === 0 ? (
             <div className="py-20 text-center opacity-30 w-full text-[10px] font-black uppercase tracking-widest italic">Nema aktivnih barbera</div>
           ) : activeBarbers.map(barber => (
             <Card key={barber.id} onClick={() => onSelectBarber(barber.id)} className={`p-5 flex items-center gap-5 transition-all rounded-[2.25rem] border min-w-0 ${barber.featured ? 'border-[#D4AF37] bg-[#D4AF37]/10' : 'border-white/5 bg-zinc-950'}`}>
@@ -158,7 +172,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
         </div>
       </section>
 
-      <section className="space-y-6">
+      <section className="space-y-6 pb-12">
         <h3 className="text-[10px] font-black text-red-500/60 uppercase tracking-[0.4em] flex items-center gap-3 px-1 truncate">
           <ShieldAlert size={16} className="shrink-0" /> ODUZETE LICENCE
         </h3>
@@ -183,7 +197,7 @@ const AdminBarbers: React.FC<AdminBarbersProps> = ({ lang, onSelectBarber }) => 
       {confirmDelete && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center px-6 animate-lux-fade">
           <div className="absolute inset-0 bg-black/95 premium-blur" onClick={() => !actionLoading && setConfirmDelete(null)}></div>
-          <Card className="relative w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-[3rem] p-10 space-y-8 flex flex-col items-center text-center">
+          <Card className="relative w-full max-w-sm bg-zinc-950 border border-red-500/30 rounded-[3rem] p-10 space-y-8 flex flex-col items-center text-center shadow-2xl">
             <AlertTriangle size={36} className="text-red-500" />
             <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Suspendirati?</h3>
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-loose">Oduzimanje licence za {confirmDelete.name}.</p>

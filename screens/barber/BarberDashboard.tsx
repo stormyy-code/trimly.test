@@ -5,7 +5,7 @@ import { supabase } from '../../store/supabase';
 import { Booking, User } from '../../types';
 import { Card, Badge, Button, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Check, X, Wallet, Scissors, User as UserIcon, TrendingUp, CalendarDays, ShieldAlert, Bell, Loader2, Zap, AlertCircle } from 'lucide-react';
+import { Check, X, Wallet, Scissors, User as UserIcon, TrendingUp, CalendarDays, ShieldAlert, Bell, Loader2, Zap, AlertCircle, Users } from 'lucide-react';
 import { APP_CONFIG } from '../../constants';
 
 interface BarberDashboardProps {
@@ -32,38 +32,42 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
-  const [allProfiles, setAllProfiles] = useState<User[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>(db.getUsersSync());
 
   const t = translations[lang];
 
   const refreshAll = async () => {
     const users = await db.getUsers();
-    setAllProfiles(users);
+    setAllUsers(users);
     await db.getBookings(barberId, 'barber');
     setRefreshTrigger(prev => prev + 1);
   };
 
   useEffect(() => {
     refreshAll();
-    const handleSync = () => refreshAll();
-    window.addEventListener('app-sync-complete', handleSync);
-    window.addEventListener('user-profile-updated', handleSync);
+    
+    const handleUsersUpdate = (e: any) => {
+      setAllUsers(e.detail?.users || db.getUsersSync());
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    window.addEventListener('users-registry-updated', handleUsersUpdate);
+    window.addEventListener('app-sync-complete', () => refreshAll());
     
     const channel = supabase
-      .channel('barber-bookings-realtime')
+      .channel('barber-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barber_id=eq.${barberId}` }, () => {
         refreshAll();
       })
       .subscribe();
     
     return () => {
-      window.removeEventListener('app-sync-complete', handleSync);
-      window.removeEventListener('user-profile-updated', handleSync);
+      window.removeEventListener('users-registry-updated', handleUsersUpdate);
       supabase.removeChannel(channel);
     };
   }, [barberId]);
 
-  const { pendingBookings, activeBookings, completedBookings, stats, barberShare } = useMemo(() => {
+  const { pendingBookings, activeBookings, completedBookings, stats, barberShare, competitionCounts } = useMemo(() => {
     const rawBookings = db.getBookingsSync().filter(b => b.barberId === barberId).sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -71,6 +75,12 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
     const pending = rawBookings.filter(b => b.status === 'pending');
     const active = rawBookings.filter(b => b.status === 'accepted');
     const history = rawBookings.filter(b => ['completed', 'rejected', 'cancelled'].includes(b.status));
+
+    const compMap: Record<string, number> = {};
+    pending.forEach(b => {
+      const key = `${b.date}_${b.time}`;
+      compMap[key] = (compMap[key] || 0) + 1;
+    });
 
     const todayStr = new Date().toISOString().split('T')[0];
     const completed = rawBookings.filter(b => b.status === 'completed');
@@ -84,30 +94,31 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
     const gross = completed.reduce((sum, b) => sum + b.price, 0);
     const share = gross * APP_CONFIG.BARBER_SHARE;
 
-    return { pendingBookings: pending, activeBookings: active, completedBookings: history, stats: velocity, barberShare: share };
+    return { pendingBookings: pending, activeBookings: active, completedBookings: history, stats: velocity, barberShare: share, competitionCounts: compMap };
   }, [barberId, refreshTrigger]);
 
   const updateStatus = async (booking: Booking, status: Booking['status']) => {
     setIsUpdating(booking.id);
     
-    // 1. Ažuriramo odabrani termin
-    const result = await db.updateBookingStatus(booking.id, status);
-    
-    if (result.success) {
-      // 2. AKO JE PRIHVAĆEN: Automatski odbijamo sve ostale koji su u istom slotu
-      if (status === 'accepted') {
-        const collisions = pendingBookings.filter(b => 
-          b.id !== booking.id && 
-          b.date === booking.date && 
-          b.time === booking.time
-        );
+    // Ako prihvaćamo termin, automatski odbijamo sve ostale kandidate za taj isti slot
+    if (status === 'accepted') {
+      const collisions = pendingBookings.filter(b => 
+        b.id !== booking.id && 
+        b.date === booking.date && 
+        b.time === booking.time
+      );
+      
+      // Odbijamo ostale
+      for (const coll of collisions) {
+        await db.updateBookingStatus(coll.id, 'rejected');
+      }
+      
+      setToast({ msg: lang === 'hr' ? 'Termin potvrđen! Ostali kandidati su odbijeni.' : 'Appointment confirmed! Other candidates declined.', type: 'success' });
+    }
 
-        for (const coll of collisions) {
-          await db.updateBookingStatus(coll.id, 'rejected');
-        }
-        
-        setToast({ msg: lang === 'hr' ? 'Termin potvrđen! Ostali zahtjevi su odbijeni.' : 'Appointment confirmed! Others auto-rejected.', type: 'success' });
-      } else {
+    const result = await db.updateBookingStatus(booking.id, status);
+    if (result.success) {
+      if (status !== 'accepted') {
         setToast({ msg: 'Ažurirano!', type: 'success' });
       }
       await refreshAll();
@@ -119,11 +130,13 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
 
   const renderBookingCard = (booking: Booking) => {
     const isCancelled = booking.status === 'cancelled';
-    const clientProfile = allProfiles.find(p => p.id === booking.customerId);
-    const displayName = clientProfile?.fullName || booking.customerName || booking.customerEmail.split('@')[0];
+    const client = allUsers.find(u => u.id === booking.customerId);
+    const displayName = client?.fullName || booking.customerName || 'Klijent';
+    const competitionKey = `${booking.date}_${booking.time}`;
+    const hasCompetition = (competitionCounts[competitionKey] || 0) > 1;
     
     return (
-      <Card key={booking.id} className={`p-4 xs:p-5 border-white/5 bg-zinc-950 rounded-[2rem] space-y-4 relative overflow-hidden ${isCancelled ? 'opacity-60 grayscale border-red-500/20 bg-red-500/5' : ''}`}>
+      <Card key={booking.id} className={`p-4 xs:p-5 border-white/5 bg-zinc-950 rounded-[2rem] space-y-4 relative overflow-hidden ${isCancelled ? 'opacity-60 grayscale border-red-500/20 bg-red-500/5' : ''} ${hasCompetition && booking.status === 'pending' ? 'border-amber-500/30 bg-amber-500/[0.02]' : ''}`}>
         {isUpdating === booking.id && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex items-center justify-center">
             <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
@@ -132,7 +145,7 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="shrink-0 w-10 h-10 xs:w-11 xs:h-11 bg-zinc-900 rounded-xl flex items-center justify-center border border-white/5 overflow-hidden">
-              {clientProfile?.avatarUrl ? <img src={clientProfile.avatarUrl} className="w-full h-full object-cover" /> : <UserIcon size={16} className="text-zinc-700" />}
+              {client?.avatarUrl ? <img src={client.avatarUrl} className="w-full h-full object-cover" /> : <UserIcon size={16} className="text-zinc-700" />}
             </div>
             <div className="min-w-0">
               <h3 className="font-black text-[10px] xs:text-xs text-white uppercase italic tracking-tighter leading-none truncate">{displayName}</h3>
@@ -141,8 +154,8 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
           </div>
           <div className="text-right flex flex-col items-end gap-1 shrink-0 min-w-[50px]">
             <span className="block font-black text-base xs:text-lg text-white italic tracking-tighter leading-none">{booking.price}€</span>
-            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? 'warning' : 'success'} className="text-[6px] px-2 py-0.5">
-              {isCancelled ? 'OTKAZANO' : booking.status.toUpperCase()}
+            <Badge variant={isCancelled ? 'error' : booking.status === 'pending' ? (hasCompetition ? 'gold' : 'warning') : 'success'} className="text-[6px] px-2 py-0.5">
+              {isCancelled ? 'OTKAZANO' : hasCompetition && booking.status === 'pending' ? `KONKURENCIJA (${competitionCounts[competitionKey]})` : booking.status.toUpperCase()}
             </Badge>
           </div>
         </div>
@@ -169,6 +182,13 @@ const BarberDashboard: React.FC<BarberDashboardProps> = ({ barberId, lang }) => 
             {booking.status === 'accepted' && (
               <Button variant="secondary" disabled={!!isUpdating} className="w-full h-10 xs:h-11 text-[7px] font-black uppercase rounded-xl px-0" onClick={() => updateStatus(booking, 'completed')}>{t.finalizeCut}</Button>
             )}
+          </div>
+        )}
+        
+        {hasCompetition && booking.status === 'pending' && (
+          <div className="flex items-center gap-2 px-1">
+            <Users size={10} className="text-amber-500" />
+            <span className="text-[6px] font-black text-amber-500/60 uppercase tracking-widest">Prihvaćanjem ovog klijenta, svi ostali zahtjevi za ovaj termin bit će automatski odbijeni.</span>
           </div>
         )}
       </Card>

@@ -4,7 +4,7 @@ import { db } from '../../store/database';
 import { Service, Booking, User, WorkingDay, Review } from '../../types';
 import { Button, Card, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare, BarChart3, AlertTriangle, Mail, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare, BarChart3, AlertTriangle, Mail, User as UserIcon, ZoomIn, Users } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -20,6 +20,10 @@ interface DateOption {
 }
 
 const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onBack, user, lang }) => {
+  const [services, setServices] = useState<Service[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -28,19 +32,36 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>(db.getUsersSync());
+  const [selectedGalleryImg, setSelectedGalleryImg] = useState<string | null>(null);
 
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
 
   useEffect(() => {
     db.getUsers().then(setAllUsers);
+    setServicesLoading(true);
+    db.getServices(barberId).then(data => {
+      setServices(data);
+      setServicesLoading(false);
+    }).catch(() => setServicesLoading(false));
+
+    setReviewsLoading(true);
+    db.getReviews(barberId).then(data => {
+      setReviews(data);
+      setReviewsLoading(false);
+    }).catch(() => setReviewsLoading(false));
     
     const handleRegistryUpdate = (e: any) => {
       setAllUsers(e.detail?.users || db.getUsersSync());
     };
     window.addEventListener('users-registry-updated', handleRegistryUpdate);
-    return () => window.removeEventListener('users-registry-updated', handleRegistryUpdate);
-  }, []);
+    window.addEventListener('user-profile-updated', () => db.getUsers().then(setAllUsers));
+    
+    return () => {
+      window.removeEventListener('users-registry-updated', handleRegistryUpdate);
+      window.removeEventListener('user-profile-updated', () => db.getUsers().then(setAllUsers));
+    };
+  }, [barberId]);
 
   if (!barber) {
     return (
@@ -51,8 +72,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     );
   }
 
-  const services = db.getServicesSync().filter(s => s.barberId === barberId);
-  const reviews = db.getReviewsSync().filter(r => r.barberId === barberId);
   const barberBookings = db.getBookingsSync().filter(b => b.barberId === barberId);
   
   const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
@@ -70,18 +89,23 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
     if (!dayConfig || !dayConfig.enabled) return [];
 
-    const slots: { time: string; isTaken: boolean; isRequested: boolean }[] = [];
+    const slots: { time: string; isTaken: boolean; isRequested: boolean; competitionCount: number }[] = [];
     const interval = barber.slotInterval || 45;
     
-    // KLJUČNA PROMJENA: Slot je "IsTaken" samo ako je već netko PRIHVAĆEN (status 'accepted')
     const takenTimes = barberBookings
       .filter(b => b.date === selectedDate && b.status === 'accepted')
       .map(b => b.time);
 
-    // Provjeravamo je li trenutni korisnik već poslao zahtjev za ovaj slot
     const requestedByMe = barberBookings
       .filter(b => b.date === selectedDate && b.customerId === user.id && b.status === 'pending')
       .map(b => b.time);
+
+    const competitionMap: Record<string, number> = {};
+    barberBookings
+      .filter(b => b.date === selectedDate && b.status === 'pending')
+      .forEach(b => {
+        competitionMap[b.time] = (competitionMap[b.time] || 0) + 1;
+      });
 
     const breaks = dayConfig.breaks || [];
 
@@ -111,7 +135,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         slots.push({
           time: timeStr,
           isTaken: takenTimes.includes(timeStr),
-          isRequested: requestedByMe.includes(timeStr)
+          isRequested: requestedByMe.includes(timeStr),
+          competitionCount: competitionMap[timeStr] || 0
         });
       }
       current += interval;
@@ -197,6 +222,14 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
+      {/* Gallery Lightbox */}
+      {selectedGalleryImg && (
+        <div className="fixed inset-0 z-[300] bg-black/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-lux-fade" onClick={() => setSelectedGalleryImg(null)}>
+           <button className="absolute top-10 right-10 text-white z-[310] bg-white/10 p-4 rounded-full"><X size={24} /></button>
+           <img src={selectedGalleryImg} className="max-w-full max-h-[80vh] rounded-[2rem] shadow-2xl border border-white/10" alt="Gallery preview" />
+        </div>
+      )}
+
       <div className="sticky top-0 left-0 right-0 z-50 bg-black/90 premium-blur border-b border-white/5 px-6 py-4 flex justify-between items-center pt-safe">
         <button onClick={onBack} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-400 border border-white/5">
           <ArrowLeft size={18} />
@@ -241,6 +274,23 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
         {activeTab === 'info' ? (
           <div className="space-y-12 animate-lux-fade pb-20">
+             {/* GALLERY SECTION */}
+             {barber.gallery && barber.gallery.length > 0 && (
+               <section className="space-y-4">
+                  <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Images size={14} className="text-[#D4AF37]" /> GALERIJA RADOVA</div>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6">
+                    {barber.gallery.map((img, i) => (
+                      <div key={i} onClick={() => setSelectedGalleryImg(img)} className="relative shrink-0 w-48 aspect-[4/5] rounded-[2rem] overflow-hidden border border-white/5 shadow-2xl active:scale-95 transition-all">
+                        <SafeImage src={img} className="" />
+                        <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-xl border border-white/10">
+                          <ZoomIn size={14} className="text-white" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+               </section>
+             )}
+
              <section className="space-y-4">
                 <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><MapPin size={14} className="text-[#D4AF37]" /> LOKACIJA</div>
                 <Card className="p-6 bg-zinc-900/40 border-white/5">
@@ -252,6 +302,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                   </Button>
                 </Card>
              </section>
+             
              <section className="space-y-4">
                 <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Info size={14} className="text-[#D4AF37]" /> BIO</div>
                 <p className="text-zinc-400 leading-relaxed italic text-xs font-bold px-6 py-5 bg-zinc-950 rounded-3xl border border-white/5">{barber.bio || 'Barber nije dodao opis.'}</p>
@@ -259,7 +310,14 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           </div>
         ) : activeTab === 'services' ? (
           <div className="space-y-4 animate-lux-fade pb-20">
-            {services.map(s => (
+            {servicesLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-30">
+                <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
+                <span className="text-[9px] font-black uppercase tracking-widest">Učitavanje ponude...</span>
+              </div>
+            ) : services.length === 0 ? (
+              <div className="py-24 text-center opacity-20 italic text-xs">Ovaj barber trenutno nema objavljenih usluga.</div>
+            ) : services.map(s => (
               <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-6 flex gap-6 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl scale-[1.02]' : 'border-white/5'}`}>
                 <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
                   <SafeImage src={s.imageUrl || ''} className="" />
@@ -277,15 +335,34 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
           </div>
         ) : (
           <div className="space-y-6 animate-lux-fade pb-20">
-             {reviews.length === 0 ? <div className="py-24 text-center opacity-20 italic text-xs">Nema recenzija.</div> : reviews.map(r => (
-               <Card key={r.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-3">
-                 <div className="flex justify-between items-center">
-                    <span className="text-xs font-black text-white italic uppercase">{r.customerName}</span>
-                    <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={10} className={s <= r.rating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'} />)}</div>
-                 </div>
-                 <p className="text-zinc-400 text-xs italic">"{r.comment}"</p>
-               </Card>
-             ))}
+             {reviewsLoading ? (
+               <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-30">
+                 <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
+                 <span className="text-[9px] font-black uppercase tracking-widest">Dohvaćanje ocjena...</span>
+               </div>
+             ) : reviews.length === 0 ? (
+               <div className="py-24 text-center opacity-20 italic text-xs">Nema recenzija.</div>
+             ) : reviews.map(r => {
+               const currentUser = allUsers.find(u => u.id === r.customerId);
+               const displayName = currentUser?.fullName || r.customerName || 'Klijent';
+               
+               return (
+                 <Card key={r.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-3">
+                   <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        {currentUser?.avatarUrl && (
+                          <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10">
+                            <img src={currentUser.avatarUrl} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <span className="text-xs font-black text-white italic uppercase">{displayName}</span>
+                      </div>
+                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={10} className={s <= r.rating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'} />)}</div>
+                   </div>
+                   <p className="text-zinc-400 text-xs italic">"{r.comment}"</p>
+                 </Card>
+               );
+             })}
           </div>
         )}
       </div>
@@ -312,7 +389,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                   key={slot.time} 
                   disabled={slot.isTaken || slot.isRequested} 
                   onClick={() => setSelectedTime(slot.time)} 
-                  className={`py-3.5 rounded-xl border text-[9px] font-black transition-all ${
+                  className={`relative py-3.5 rounded-xl border text-[9px] font-black transition-all ${
                     slot.isTaken 
                       ? 'bg-red-500/10 text-red-500 border-red-500/20 opacity-50 cursor-not-allowed' 
                       : slot.isRequested
@@ -323,13 +400,18 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                   }`}
                 >
                   {slot.isTaken ? 'ZAUZETO' : slot.isRequested ? 'U OBRADI' : slot.time}
+                  {!slot.isTaken && slot.competitionCount > 0 && (
+                    <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[7px] px-1.5 rounded-full border border-black flex items-center gap-0.5">
+                      <Users size={6} /> {slot.competitionCount}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
           )}
           <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
              <AlertTriangle className="text-amber-500 shrink-0" size={16} />
-             <p className="text-[8px] font-black text-white uppercase tracking-widest">Više ljudi može tražiti ovaj slot. Barber bira tko dobiva termin.</p>
+             <p className="text-[8px] font-black text-white uppercase tracking-widest">Više klijenata može tražiti isti slot. Barber bira tko dobiva termin.</p>
           </div>
           <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-18 text-xs font-black">Pošalji Zahtjev</Button>
         </div>

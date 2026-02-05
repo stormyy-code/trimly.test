@@ -19,9 +19,9 @@ interface CustomerProfileProps {
 
 const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout, onRoleUpdate }) => {
   const [isUploading, setIsUploading] = useState(false);
-  const [profilePic, setProfilePic] = useState<string | null>(null);
-  const [fullName, setFullName] = useState('');
-  const [tempName, setTempName] = useState('');
+  const [profilePic, setProfilePic] = useState<string | null>(user.avatarUrl || null);
+  const [fullName, setFullName] = useState(user.fullName || '');
+  const [tempName, setTempName] = useState(user.fullName || '');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isChangingPass, setIsChangingPass] = useState(false);
   const [newPass, setNewPass] = useState('');
@@ -38,7 +38,7 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
   useEffect(() => {
     setFullName(user.fullName || '');
     setTempName(user.fullName || '');
-    if (user.avatarUrl) setProfilePic(user.avatarUrl);
+    setProfilePic(user.avatarUrl || null);
   }, [user]);
 
   const handleUpdateName = async () => {
@@ -49,13 +49,10 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
     try {
       const result = await db.updateProfileDetails(user.id, { fullName: trimmedName });
       
-      // FIX: Provjeravamo result.success jer db.ts vraća objekt { success: boolean }
       if (result.success) {
         setFullName(trimmedName);
         setToastMsg({ msg: t.done, type: 'success' });
         setIsEditingName(false);
-        // Osvježi aktivnog korisnika u App.tsx preko eventa
-        window.dispatchEvent(new Event('user-profile-updated'));
       } else {
         setToastMsg({ msg: result.error || 'Greška pri spremanju.', type: 'error' });
       }
@@ -84,6 +81,8 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         if (updateResult.success) {
           setProfilePic(result.url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
+          // Force refresh state via App
+          window.dispatchEvent(new Event('user-profile-updated'));
         } else {
           setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu.', type: 'error' });
         }

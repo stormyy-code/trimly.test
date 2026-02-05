@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../store/database';
 import { supabase } from '../../store/supabase';
-import { Booking, Review, User } from '../../types';
+import { Booking, Review, User, BarberProfile } from '../../types';
 import { Card, Badge, Button, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Calendar, Clock, Star, RefreshCw, BellRing, Trash2, Loader2, AlertTriangle, X, History, Zap } from 'lucide-react';
+import { Calendar, Clock, Star, RefreshCw, BellRing, Trash2, Loader2, AlertTriangle, X, History, Zap, Users } from 'lucide-react';
 
 interface CustomerBookingsProps {
   user: User;
@@ -16,6 +16,8 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
   const [activeView, setActiveView] = useState<'upcoming' | 'past'>('upcoming');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reviews, setReviews] = useState<Review[]>(db.getReviewsSync());
+  const [barbers, setBarbers] = useState<BarberProfile[]>(db.getBarbersSync());
+  const [allBookingsInSystem, setAllBookingsInSystem] = useState<Booking[]>([]);
   const [feedbackBooking, setFeedbackBooking] = useState<Booking | null>(null);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -31,6 +33,30 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
     try {
       const all = await db.getBookings(user.id, 'customer');
       setBookings(all || []);
+      
+      const allReviews = await db.getReviews();
+      setReviews(allReviews);
+      
+      const allBarbers = await db.getBarbers();
+      setBarbers(allBarbers);
+
+      // Dohvati sve rezervacije u sustavu (samo accepted) da vidimo tko nam je "oteo" termin
+      const { data: acceptedAny } = await supabase.from('bookings').select('*').eq('status', 'accepted');
+      if (acceptedAny) setAllBookingsInSystem(acceptedAny.map(b => ({
+        id: b.id,
+        customerId: b.customer_id,
+        customerName: b.customer_name,
+        customerEmail: b.customer_email,
+        barberId: b.barber_id,
+        serviceId: b.service_id,
+        serviceName: b.service_name,
+        date: b.date,
+        time: b.time,
+        price: b.price,
+        status: b.status,
+        createdAt: b.created_at
+      })));
+
     } catch (err) {
       console.error("Greška pri dohvaćanju termina:", err);
     } finally {
@@ -42,8 +68,10 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
     fetchBookings(true);
     
     const handleReviewsUpdate = () => setReviews(db.getReviewsSync());
+    const handleBarbersUpdate = () => setBarbers(db.getBarbersSync());
+    
     window.addEventListener('reviews-updated', handleReviewsUpdate);
-    window.addEventListener('user-profile-updated', () => fetchBookings(false));
+    window.addEventListener('app-sync-complete', fetchBookings as any);
 
     const channel = supabase
       .channel(`customer-bookings-realtime-${user.id}`)
@@ -54,6 +82,7 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
         filter: `customer_id=eq.${user.id}` 
       }, () => {
         fetchBookings(false);
+        setToast({ msg: lang === 'hr' ? 'Status termina je ažuriran!' : 'Appointment status updated!', type: 'success' });
       })
       .subscribe();
 
@@ -73,108 +102,111 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
 
   const hasReview = (bookingId: string) => reviews.some(r => r.bookingId === bookingId);
 
-  const isCancelable = (date: string, time: string) => {
-    try {
-      // Normalizacija formata vremena HH:mm
-      const normalizedTime = time.length === 5 ? time : time.padStart(5, '0');
-      const appointmentDate = new Date(`${date}T${normalizedTime}:00`);
-      const now = new Date();
-      
-      // Razlika u satima
-      const diffInMs = appointmentDate.getTime() - now.getTime();
-      const diffInHours = diffInMs / (1000 * 60 * 60);
-      
-      return diffInHours >= 6;
-    } catch (e) { 
-      return false; 
-    }
-  };
-
   const handleCancelBooking = async (e: React.MouseEvent, booking: Booking) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!isCancelable(booking.date, booking.time)) {
-      setToast({ 
-        msg: lang === 'hr' ? 'Otkazivanje nije moguće manje od 6h prije termina.' : 'Cancellation not allowed less than 6h before.', 
-        type: 'error' 
-      });
-      setConfirmCancelId(null);
-      return;
-    }
-
     if (confirmCancelId !== booking.id) {
       setConfirmCancelId(booking.id);
       return;
     }
-
     setActionLoading(booking.id);
     try {
       const result = await db.updateBookingStatus(booking.id, 'cancelled');
-      
       if (result.success) {
-        setToast({ msg: lang === 'hr' ? 'Termin uspješno otkazan.' : 'Appointment cancelled.', type: 'success' });
-        // Prisilni refresh liste i micanje iz UI-a
-        setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'cancelled' } : b));
+        setToast({ msg: lang === 'hr' ? 'Termin otkazan.' : 'Appointment cancelled.', type: 'success' });
         await fetchBookings(false);
       } else {
-        // Prikazujemo točnu grešku (vjerojatno SQL RLS problem)
         setToast({ msg: `Greška: ${result.error}`, type: 'error' });
       }
     } catch (err: any) {
-      setToast({ msg: 'Sistemska greška pri otkazivanju.', type: 'error' });
+      setToast({ msg: 'Sistemska greška.', type: 'error' });
     } finally {
       setActionLoading(null);
       setConfirmCancelId(null);
     }
   };
 
+  const handleSubmitReview = async () => {
+    if (!feedbackBooking) return;
+    setActionLoading(feedbackBooking.id);
+    const newReview: Review = {
+      id: crypto.randomUUID(),
+      bookingId: feedbackBooking.id,
+      barberId: feedbackBooking.barberId,
+      customerId: user.id,
+      customerName: user.fullName || user.email.split('@')[0],
+      customerEmail: user.email,
+      rating,
+      comment,
+      createdAt: new Date().toISOString()
+    };
+    const result = await db.createReview(newReview);
+    if (result.success) {
+      setToast({ msg: lang === 'hr' ? 'Recenzija objavljena!' : 'Review posted!', type: 'success' });
+      setFeedbackBooking(null);
+      setComment('');
+      await fetchBookings(false);
+    } else {
+      setToast({ msg: result.error || 'Greška pri slanju.', type: 'error' });
+    }
+    setActionLoading(null);
+  };
+
   const renderBookingCard = (booking: Booking) => {
-    const barber = db.getBarbersSync().find(b => b.id === booking.barberId);
+    const barber = barbers.find(b => b.id === booking.barberId);
     const reviewed = hasReview(booking.id);
     const isCancelled = booking.status === 'cancelled';
-    const isAccepted = booking.status === 'accepted';
     const isCompleted = booking.status === 'completed';
+    const isRejected = booking.status === 'rejected';
     const isConfirming = confirmCancelId === booking.id;
-    const canCancel = isCancelable(booking.date, booking.time) && !['completed', 'rejected', 'cancelled'].includes(booking.status);
+
+    // Provjeri postoji li netko drugi tko je PRIHVAĆEN za ovaj isti slot
+    const takenBySomeoneElse = isRejected && allBookingsInSystem.some(b => 
+      b.barberId === booking.barberId && 
+      b.date === booking.date && 
+      b.time === booking.time && 
+      b.customerId !== booking.customerId
+    );
 
     return (
-      <Card key={booking.id} className={`p-6 space-y-6 border-white/5 relative overflow-hidden transition-all ${isCancelled ? 'opacity-50 grayscale border-red-500/10' : ''}`}>
+      <Card key={booking.id} className={`p-6 space-y-6 border-white/5 relative overflow-hidden transition-all ${isCancelled || isRejected ? 'opacity-70 grayscale' : ''}`}>
         <div className="flex justify-between items-start">
           <div className="flex gap-4">
-            <img src={barber?.profilePicture} className="w-14 h-14 rounded-2xl object-cover border border-white/10" alt="" />
+            <div className="w-14 h-14 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+               <img src={barber?.profilePicture} className="w-full h-full object-cover" alt="" />
+            </div>
             <div className="py-1">
               <h3 className="font-black text-lg text-white tracking-tight italic uppercase leading-none">{barber?.fullName || 'Barber'}</h3>
               <p className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mt-2">{booking.serviceName}</p>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <Badge variant={isCancelled ? 'error' : isAccepted ? 'success' : booking.status === 'pending' ? 'warning' : 'neutral'}>
-              {isCancelled ? (lang === 'hr' ? 'OTKAZANO' : 'CANCELLED') : booking.status.toUpperCase()}
+            <Badge variant={isCancelled || isRejected ? 'error' : booking.status === 'accepted' ? 'success' : 'warning'}>
+              {isRejected && takenBySomeoneElse ? 'ZAUZEO DRUGI KLIJENT' : booking.status.toUpperCase()}
             </Badge>
-            {upcoming.some(b => b.id === booking.id) && !isCancelled && (
+            {!isCancelled && !isCompleted && !isRejected && (
               <button 
                 onClick={(e) => handleCancelBooking(e, booking)} 
-                disabled={actionLoading === booking.id}
-                className={`text-[8px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border transition-all flex items-center justify-center min-w-[85px] h-9 ${
-                  isConfirming ? 'bg-red-600 text-white border-red-400 animate-pulse' : 'bg-red-500/10 text-red-500 border-red-500/20 active:scale-95'
-                } ${!canCancel && !isConfirming ? 'opacity-20 cursor-not-allowed grayscale pointer-events-none' : ''}`}
+                className={`text-[8px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border transition-all ${
+                  isConfirming ? 'bg-red-600 text-white' : 'bg-red-500/10 text-red-500 border-red-500/20'
+                }`}
               >
-                {actionLoading === booking.id ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : isConfirming ? (
-                  lang === 'hr' ? 'POTVRDI' : 'CONFIRM'
-                ) : (
-                  lang === 'hr' ? 'OTKAŽI' : 'CANCEL'
-                )}
+                {actionLoading === booking.id ? <Loader2 size={12} className="animate-spin" /> : isConfirming ? 'POTVRDI' : 'OTKAŽI'}
               </button>
             )}
             {isCompleted && !reviewed && (
-              <button onClick={() => setFeedbackBooking(booking)} className="text-[8px] font-black uppercase tracking-widest px-3 py-2 bg-[#D4AF37] text-black rounded-lg h-9">OCJENI</button>
+              <button onClick={() => setFeedbackBooking(booking)} className="text-[8px] font-black uppercase tracking-widest px-3 py-2 bg-[#D4AF37] text-black rounded-lg">OCJENI</button>
             )}
           </div>
         </div>
         
+        {takenBySomeoneElse && (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2">
+            <Users size={12} className="text-red-500 shrink-0" />
+            <p className="text-[7.5px] font-black text-red-500 uppercase tracking-widest leading-relaxed">Nažalost, barber je prihvatio drugog klijenta za ovaj termin. Odaberite novi termin.</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4 py-4 border-y border-white/5">
           <div className="flex items-center gap-2 text-zinc-400">
             <Calendar size={12} className="text-[#C5A059]" />
@@ -185,11 +217,8 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
             <span className="text-[9px] font-black uppercase tracking-widest">{booking.time}h</span>
           </div>
         </div>
-
         <div className="flex justify-between items-center">
-          <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">
-            {isCancelled ? (lang === 'hr' ? 'Ovaj termin je otkazan' : 'Appointment cancelled') : (lang === 'hr' ? 'Plaćanje u salonu' : 'Pay at shop')}
-          </span>
+          <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600">Plaćanje u salonu</span>
           <span className="text-xl font-black text-white italic">{booking.price}€</span>
         </div>
       </Card>
@@ -199,42 +228,29 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
   return (
     <div className="space-y-8 animate-slide-up pb-32" onClick={() => setConfirmCancelId(null)}>
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      
-      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 ios-shadow flex items-center justify-between">
+      <div className="premium-blur bg-white/5 rounded-[2.5rem] p-8 border border-white/10 flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-1">{lang === 'hr' ? 'DNEVNIK ŠIŠANJA' : 'HAIRCUT LOG'}</p>
-          <h2 className="text-3xl font-black text-white tracking-tighter italic">{lang === 'hr' ? 'Vaši Termini' : 'Your Visits'}</h2>
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-1">DNEVNIK ŠIŠANJA</p>
+          <h2 className="text-3xl font-black text-white tracking-tighter italic">Vaši Termini</h2>
         </div>
         <button onClick={() => fetchBookings(true)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white active:rotate-180 transition-all">
           <RefreshCw size={24} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-
       <div className="flex bg-zinc-950 p-1.5 rounded-3xl border border-white/5 mx-1">
         <button onClick={() => setActiveView('upcoming')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${activeView === 'upcoming' ? 'bg-white text-black shadow-xl' : 'text-zinc-600'}`}>
-           <Zap size={14} /> {lang === 'hr' ? 'Aktivni' : 'Active'} ({upcoming.length})
+           <Zap size={14} /> Aktivni ({upcoming.length})
         </button>
         <button onClick={() => setActiveView('past')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 ${activeView === 'past' ? 'bg-zinc-900 text-zinc-500' : 'text-zinc-600'}`}>
-           <History size={14} /> {lang === 'hr' ? 'Povijest' : 'History'} ({past.length})
+           <History size={14} /> Povijest ({past.length})
         </button>
       </div>
-
       <div className="space-y-6 px-1">
-        {activeView === 'upcoming' ? (
-          upcoming.length === 0 ? (
-            <div className="py-24 text-center opacity-20 italic text-xs">
-              {lang === 'hr' ? 'Nema aktivnih termina.' : 'No active appointments.'}
-            </div>
-          ) : upcoming.map(renderBookingCard)
-        ) : (
-          past.length === 0 ? (
-            <div className="py-24 text-center opacity-20 italic text-xs">
-              {lang === 'hr' ? 'Povijest je prazna.' : 'History is empty.'}
-            </div>
-          ) : past.map(renderBookingCard)
+        {(activeView === 'upcoming' ? upcoming : past).map(renderBookingCard)}
+        {(activeView === 'upcoming' ? upcoming : past).length === 0 && (
+          <div className="py-24 text-center opacity-20 italic text-xs">Nema termina.</div>
         )}
       </div>
-
       {feedbackBooking && (
         <div className="fixed inset-0 z-[500] flex items-end justify-center px-6 pb-12 animate-lux-fade">
           <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setFeedbackBooking(null)}></div>
@@ -251,8 +267,8 @@ const CustomerBookings: React.FC<CustomerBookingsProps> = ({ user, lang }) => {
                 </button>
               ))}
             </div>
-            <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder={lang === 'hr' ? 'Kako ste zadovoljni?' : 'How was your experience?'} className="w-full bg-black rounded-2xl border border-white/5 p-5 text-xs text-zinc-400 min-h-[100px] outline-none" />
-            <Button onClick={() => {}} loading={!!actionLoading} className="w-full h-16">Spremi ocjenu</Button>
+            <textarea value={comment} onChange={e => setComment(e.target.value)} placeholder="Kako ste zadovoljni?" className="w-full bg-black rounded-2xl border border-white/5 p-5 text-xs text-zinc-400 min-h-[100px] outline-none" />
+            <Button onClick={handleSubmitReview} loading={!!actionLoading} className="w-full h-16">Spremi ocjenu</Button>
           </Card>
         </div>
       )}

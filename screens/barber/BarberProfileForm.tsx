@@ -46,28 +46,29 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const loadExisting = async () => {
-      try {
-        const barbers = await db.getBarbers();
-        const existing = barbers.find(b => b.userId === userId);
-        if (existing) {
-          setIsAlreadyApproved(existing.approved);
-          setFullName(existing.fullName || '');
-          setPhoneNumber(existing.phoneNumber || '');
-          setNeighborhood(existing.neighborhood || '');
-          setAddress(existing.address || '');
-          setBio(existing.bio || '');
-          setWorkMode(existing.workMode || 'classic');
-          setPic(existing.profilePicture || '');
-          setGallery(existing.gallery || []);
-          if (existing.zipCode) setZipCode(existing.zipCode);
-          if (existing.city) setCity(existing.city);
-        }
-      } catch (e) {
-        console.error("Load existing profile error:", e);
+  const loadExisting = async () => {
+    try {
+      const barbers = await db.getBarbers();
+      const existing = barbers.find(b => b.userId === userId);
+      if (existing) {
+        setIsAlreadyApproved(existing.approved);
+        setFullName(existing.fullName || '');
+        setPhoneNumber(existing.phoneNumber || '');
+        setNeighborhood(existing.neighborhood || '');
+        setAddress(existing.address || '');
+        setBio(existing.bio || '');
+        setWorkMode(existing.workMode || 'classic');
+        setPic(existing.profilePicture || '');
+        setGallery(existing.gallery || []);
+        if (existing.zipCode) setZipCode(existing.zipCode);
+        if (existing.city) setCity(existing.city);
       }
-    };
+    } catch (e) {
+      console.error("Load existing profile error:", e);
+    }
+  };
+
+  useEffect(() => {
     loadExisting();
   }, [userId]);
 
@@ -143,7 +144,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
         bio: bio || '',
         gallery: gallery,
         workMode,
-        // CRITICAL: Zadržavamo odobren status ako ga već imamo!
         approved: existing ? existing.approved : false,
         featured: existing ? existing.featured : false,
         weeklyWinner: existing ? existing.weeklyWinner : false,
@@ -157,12 +157,10 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const result = await db.saveBarbers(profile);
       if (result.success) {
         setToastMsg({ msg: t.done, type: 'success' });
-        // Ako je ovo bio prvi unos (setup), idemo na onComplete
+        await loadExisting(); // Ponovno učitaj da vidimo promjene
+        
         if (!isAlreadyApproved) {
           setTimeout(onComplete, 1200);
-        } else {
-          // Ako je samo update, samo refreshamo lokalne podatke
-          await db.getBarbers();
         }
       } else {
         throw new Error(result.error);
@@ -170,7 +168,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     } catch (err: any) {
       console.error("Save Error:", err);
       setSaveError(err.message);
-      setToastMsg({ msg: 'Spremanje nije uspjelo.', type: 'error' });
+      setToastMsg({ msg: 'Spremanje nije uspjelo: ' + err.message, type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -217,9 +215,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
               {isAlreadyApproved ? 'Vaša licenca je aktivna' : 'Koračić do aktivacije'}
             </p>
          </div>
-         {isAlreadyApproved && (
-           <Badge variant="gold" className="px-6 py-2.5">Mrežni Partner</Badge>
-         )}
       </header>
 
       <div className="px-6 space-y-10">
@@ -247,7 +242,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
                <div className="flex items-center gap-3 text-red-500 font-black uppercase text-[9px] tracking-widest">
                  <AlertTriangle size={14} /> GREŠKA PRILIKOM SPREMANJA
                </div>
-               <p className="text-zinc-400 text-[10px] italic leading-tight">Moguće je da polisa baze brani izmjene. Provjerite internet vezu.</p>
+               <p className="text-zinc-400 text-[10px] italic leading-tight">{saveError}</p>
             </div>
           )}
 
@@ -309,14 +304,10 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
           </section>
 
           <Button className="w-full h-20 text-xs font-black shadow-2xl mt-8" onClick={handleSave} loading={isLoading}>
-            {isAlreadyApproved ? 'Spremi Promjene' : 'Spremi i pošalji na odobrenje'}
+            Spremi Promjene
           </Button>
 
           <section className="space-y-6 pt-10 pb-10">
-            <div className="flex items-center gap-3 ml-4">
-               <Sparkles size={14} className="text-[#D4AF37]" />
-               <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">System & Network</p>
-            </div>
             <Card className="p-6 bg-zinc-950 border-white/5 space-y-4">
               <button onClick={() => setIsSupportOpen(true)} className="w-full py-4 border border-[#D4AF37]/10 bg-[#D4AF37]/5 rounded-2xl text-[9px] font-black text-[#D4AF37] uppercase tracking-widest flex items-center justify-center gap-3"><Sparkles size={14} /> Tehnička Podrška</button>
               <button onClick={() => setIsLegalOpen(true)} className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black text-zinc-400 uppercase tracking-widest flex items-center justify-center gap-3"><FileText size={14} /> Pravne informacije</button>
@@ -324,10 +315,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
           </section>
 
           <section className="space-y-6 pt-2 pb-20">
-            <div className="flex items-center gap-3 ml-4">
-               <Trash2 size={14} className="text-red-500" />
-               <p className="text-[10px] font-black text-red-500/60 uppercase tracking-widest">{t.dangerZone}</p>
-            </div>
             <Card className="p-6 bg-red-500/5 border-red-500/10 space-y-4">
               <button 
                 onClick={() => setShowDeleteConfirm(true)}
@@ -355,7 +342,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
             <AlertTriangle size={48} className="text-red-500" />
             <div className="space-y-2">
               <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">{t.confirmDeleteAccount}</h3>
-              <p className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest leading-loose">Vaš barber profil, usluge i galerija bit će trajno uklonjeni iz Trimly mreže.</p>
+              <p className="text-zinc-500 text-[9px] font-bold uppercase tracking-widest leading-loose">Vaš barber profil i podaci bit će trajno obrisani.</p>
             </div>
             <div className="flex flex-col w-full gap-3">
               <Button variant="danger" className="h-16 w-full" onClick={handleDeleteAccount} loading={deleteLoading}>Da, obriši profil</Button>
