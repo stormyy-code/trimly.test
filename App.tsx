@@ -1,27 +1,27 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { db } from './store/database.ts';
-import { supabase } from './store/supabase.ts';
-import { User, BarberProfile, UserRole } from './types.ts';
-import { Language, translations } from './translations.ts';
-import LoginScreen from './screens/auth/LoginScreen.tsx';
-import RegisterScreen from './screens/auth/RegisterScreen.tsx';
-import Layout from './components/Layout.tsx';
-import CustomerHome from './screens/customer/CustomerHome.tsx';
-import BarberProfileDetail from './screens/customer/BarberProfileDetail.tsx';
-import CustomerBookings from './screens/customer/CustomerBookings.tsx';
-import CustomerProfile from './screens/customer/CustomerProfile.tsx';
-import BarberDashboard from './screens/barber/BarberDashboard.tsx';
-import BarberServices from './screens/barber/BarberServices.tsx';
-import BarberProfileForm from './screens/barber/BarberProfileForm.tsx';
-import BarberWaitingRoom from './screens/barber/BarberWaitingRoom.tsx';
-import BarberAvailability from './screens/barber/BarberAvailability.tsx';
-import AdminDashboard from './screens/admin/AdminDashboard.tsx';
-import AdminBarbers from './screens/admin/AdminBarbers.tsx';
-import AdminApprovals from './screens/admin/AdminApprovals.tsx';
-import LeaderboardScreen from './screens/shared/LeaderboardScreen.tsx';
+import { db } from './store/database';
+import { supabase } from './store/supabase';
+import { User, BarberProfile, UserRole } from './types';
+import { Language } from './translations';
+import LoginScreen from './screens/auth/LoginScreen';
+import RegisterScreen from './screens/auth/RegisterScreen';
+import Layout from './components/Layout';
+import CustomerHome from './screens/customer/CustomerHome';
+import BarberProfileDetail from './screens/customer/BarberProfileDetail';
+import CustomerBookings from './screens/customer/CustomerBookings';
+import CustomerProfile from './screens/customer/CustomerProfile';
+import BarberDashboard from './screens/barber/BarberDashboard';
+import BarberServices from './screens/barber/BarberServices';
+import BarberProfileForm from './screens/barber/BarberProfileForm';
+import BarberWaitingRoom from './screens/barber/BarberWaitingRoom';
+import BarberAvailability from './screens/barber/BarberAvailability';
+import AdminDashboard from './screens/admin/AdminDashboard';
+import AdminBarbers from './screens/admin/AdminBarbers';
+import AdminApprovals from './screens/admin/AdminApprovals';
+import LeaderboardScreen from './screens/shared/LeaderboardScreen';
 import { Loader2 } from 'lucide-react';
-import { Toast } from './components/UI.tsx';
+import { Toast } from './components/UI';
 
 interface ToastItem {
   id: string;
@@ -44,18 +44,23 @@ const App: React.FC = () => {
   const prevRoleRef = useRef<UserRole | null>(null);
   const lastToastRef = useRef<{ msg: string, time: number }>({ msg: '', time: 0 });
 
-  const addToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    const now = Date.now();
-    if (lastToastRef.current.msg === message && now - lastToastRef.current.time < 1000) {
-      return;
-    }
-    lastToastRef.current = { msg: message, time: now };
-    const id = Math.random().toString(36).substring(7);
-    setToasts(prev => [...prev, { id, message, type }]);
-  }, []);
-
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const syncAllData = useCallback(async (uId: string, uRole: string) => {
+    try {
+      await Promise.allSettled([
+        db.getUsers(),
+        db.getBarbers(), 
+        db.getReviews(), 
+        db.getServices(),
+        db.getBookings(uId, uRole)
+      ]);
+      window.dispatchEvent(new Event('app-sync-complete'));
+    } catch (e) {
+      console.warn("Sync warning:", e);
+    }
   }, []);
 
   const handleAuthUser = useCallback(async (supabaseUser: any): Promise<User | null> => {
@@ -65,10 +70,9 @@ const App: React.FC = () => {
       return null;
     }
     
-    // GVOZDENA ZAVJESA: Ako email nije potvrđen, brišemo usera iz statea i bacamo ga na register (OTP ekran)
-    // Ovo sprječava ulazak u aplikaciju čak i ako je Supabase izdao session.
+    // GVOZDENA ZAVJESA: Korisnik ne smije ući bez potvrđenog emaila (email_confirmed_at).
     if (!supabaseUser.email_confirmed_at) {
-      console.log("Blocking entry: Email not confirmed.");
+      console.log("Access blocked: Waiting for email confirmation code.");
       localStorage.setItem('trimly_awaiting_verification', 'true');
       setUser(null);
       setIsInitializing(false);
@@ -76,7 +80,6 @@ const App: React.FC = () => {
       return null;
     }
 
-    // Ako je potvrđen, mičemo lockove
     localStorage.removeItem('trimly_awaiting_verification');
 
     setIsInitializing(true);
@@ -104,6 +107,8 @@ const App: React.FC = () => {
       setUser(fullUser);
       db.setActiveUser(fullUser);
       setDbStatus('connected');
+      
+      syncAllData(fullUser.id, finalRole);
 
       if (finalRole === 'barber') {
         const bProf = await db.getBarberByUserId(fullUser.id);
@@ -117,7 +122,7 @@ const App: React.FC = () => {
     } finally {
       setIsInitializing(false);
     }
-  }, []);
+  }, [syncAllData]);
 
   useEffect(() => {
     let mounted = true;
@@ -140,11 +145,10 @@ const App: React.FC = () => {
       if (!mounted) return;
       
       if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        // Ponovno provjeravamo potvrdu kod svakog eventa
         if (!session.user.email_confirmed_at) {
+          localStorage.setItem('trimly_awaiting_verification', 'true');
           setUser(null);
           setActiveTab('register');
-          localStorage.setItem('trimly_awaiting_verification', 'true');
         } else {
           handleAuthUser(session.user);
         }
@@ -153,6 +157,8 @@ const App: React.FC = () => {
         setBarberProfile(null);
         setIsInitializing(false);
         localStorage.removeItem('trimly_awaiting_verification');
+        localStorage.removeItem('trimly_pending_email');
+        localStorage.removeItem('trimly_pending_role');
       }
     });
 
@@ -175,7 +181,6 @@ const App: React.FC = () => {
   const renderView = () => {
     const isAwaiting = localStorage.getItem('trimly_awaiting_verification') === 'true';
 
-    // Ako nemamo potvrđenog korisnika u stateu, pokazujemo registraciju/login
     if (!user || isAwaiting) {
       if (activeTab === 'register' || isAwaiting) {
         return <RegisterScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('login')} dbStatus={dbStatus} />;
