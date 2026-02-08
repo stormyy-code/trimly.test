@@ -107,7 +107,6 @@ const App: React.FC = () => {
         setBarberProfile(bProf || null);
       }
 
-      // Provjeri push permisije nakon prijave
       if (Notification.permission === 'default' && !localStorage.getItem('trimly_push_enabled')) {
         setTimeout(() => setShowPushPrompt(true), 3000);
       }
@@ -228,9 +227,8 @@ const App: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-black overflow-hidden relative">
-      {/* GLOBAL TOAST PORTAL */}
-      <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none flex flex-col items-center pt-14 px-6 gap-3">
-        {/* PUSH NOTIFICATION PROMPT - DYNAMIC ISLAND STYLE */}
+      {/* GLOBAL TOAST PORTAL - ABSOLUTE FIXED TO SCREEN */}
+      <div className="fixed top-0 left-0 right-0 z-[10000] pointer-events-none flex flex-col items-center pt-safe px-6 gap-3 pt-6">
         {showPushPrompt && (
           <div className="w-full max-w-sm pointer-events-auto animate-lux-fade origin-top">
              <div className="p-4 bg-zinc-900 border border-[#D4AF37]/40 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4 premium-blur">

@@ -37,6 +37,13 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const t = translations[lang];
   const barber = db.getBarbersSync().find(b => b.id === barberId);
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
   useEffect(() => {
     db.getUsers().then(setAllUsers);
     setServicesLoading(true);
@@ -222,7 +229,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {/* Gallery Lightbox */}
       {selectedGalleryImg && (
         <div className="fixed inset-0 z-[300] bg-black/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-lux-fade" onClick={() => setSelectedGalleryImg(null)}>
            <button className="absolute top-10 right-10 text-white z-[310] bg-white/10 p-4 rounded-full"><X size={24} /></button>
@@ -274,7 +280,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
         {activeTab === 'info' ? (
           <div className="space-y-12 animate-lux-fade pb-20">
-             {/* GALLERY SECTION */}
              {barber.gallery && barber.gallery.length > 0 && (
                <section className="space-y-4">
                   <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Images size={14} className="text-[#D4AF37]" /> GALERIJA RADOVA</div>
@@ -318,7 +323,7 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
             ) : services.length === 0 ? (
               <div className="py-24 text-center opacity-20 italic text-xs">Ovaj barber trenutno nema objavljenih usluga.</div>
             ) : services.map(s => (
-              <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-6 flex gap-6 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl scale-[1.02]' : 'border-white/5'}`}>
+              <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-4 flex gap-4 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl scale-[1.02]' : 'border-white/5'}`}>
                 <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
                   <SafeImage src={s.imageUrl || ''} className="" />
                 </div>
