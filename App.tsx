@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from './store/database';
 import { supabase } from './store/supabase';
 import { User, BarberProfile, UserRole } from './types';
@@ -20,7 +20,7 @@ import AdminDashboard from './screens/admin/AdminDashboard';
 import AdminBarbers from './screens/admin/AdminBarbers';
 import AdminApprovals from './screens/admin/AdminApprovals';
 import LeaderboardScreen from './screens/shared/LeaderboardScreen';
-import { Loader2 } from 'lucide-react';
+import { Loader2, BellRing, Sparkles } from 'lucide-react';
 import { Toast } from './components/UI';
 
 interface ToastItem {
@@ -33,56 +33,54 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [barberProfile, setBarberProfile] = useState<BarberProfile | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    return localStorage.getItem('trimly_awaiting_verification') === 'true' ? 'register' : 'home';
-  });
-  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('home');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [lang, setLang] = useState<Language>('hr'); 
-  const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
-  
-  const prevRoleRef = useRef<UserRole | null>(null);
-  const lastToastRef = useRef<{ msg: string, time: number }>({ msg: '', time: 0 });
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [isAwaitingVerify, setIsAwaitingVerify] = useState(() => localStorage.getItem('trimly_awaiting_verification') === 'true');
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+  }, []);
 
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const syncAllData = useCallback(async (uId: string, uRole: string) => {
-    try {
-      await Promise.allSettled([
-        db.getUsers(),
-        db.getBarbers(), 
-        db.getReviews(), 
-        db.getServices(),
-        db.getBookings(uId, uRole)
-      ]);
-      window.dispatchEvent(new Event('app-sync-complete'));
-    } catch (e) {
-      console.warn("Sync warning:", e);
-    }
-  }, []);
-
-  const handleAuthUser = useCallback(async (supabaseUser: any): Promise<User | null> => {
-    if (!supabaseUser) {
-      setIsInitializing(false);
-      setUser(null);
-      return null;
-    }
+  const requestPushPermission = async () => {
+    if (!('Notification' in window)) return;
     
-    // GVOZDENA ZAVJESA: Korisnik ne smije ući bez potvrđenog emaila (email_confirmed_at).
-    if (!supabaseUser.email_confirmed_at) {
-      console.log("Access blocked: Waiting for email confirmation code.");
-      localStorage.setItem('trimly_awaiting_verification', 'true');
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      showToast(lang === 'hr' ? 'Obavijesti aktivirane!' : 'Notifications enabled!', 'success');
+      setShowPushPrompt(false);
+      localStorage.setItem('trimly_push_enabled', 'true');
+    } else {
+      showToast(lang === 'hr' ? 'Obavijesti su blokirane.' : 'Notifications blocked.', 'error');
+      setShowPushPrompt(false);
+    }
+  };
+
+  const handleAuthUser = useCallback(async (supabaseUser: any) => {
+    if (!supabaseUser) {
       setUser(null);
       setIsInitializing(false);
-      setActiveTab('register');
-      return null;
+      return;
+    }
+
+    if (!supabaseUser.email_confirmed_at) {
+      localStorage.setItem('trimly_awaiting_verification', 'true');
+      setIsAwaitingVerify(true);
+      setUser(null);
+      setIsInitializing(false);
+      return;
     }
 
     localStorage.removeItem('trimly_awaiting_verification');
+    setIsAwaitingVerify(false);
 
-    setIsInitializing(true);
     try {
       const { data: profile } = await supabase
         .from('profiles')
@@ -90,105 +88,106 @@ const App: React.FC = () => {
         .eq('id', supabaseUser.id)
         .maybeSingle();
       
-      let rawRole = (profile?.role || supabaseUser.user_metadata?.role || 'customer').toLowerCase().trim();
-      let finalRole: UserRole = 'customer';
-      if (rawRole === 'admin') finalRole = 'admin';
-      else if (rawRole === 'barber') finalRole = 'barber';
+      const role = (profile?.role || supabaseUser.user_metadata?.role || 'customer') as UserRole;
       
       const fullUser: User = { 
         id: supabaseUser.id, 
-        email: supabaseUser.email || profile?.email || '', 
-        role: finalRole,
-        fullName: profile?.full_name || supabaseUser.user_metadata?.full_name || '',
+        email: supabaseUser.email, 
+        role: role,
+        fullName: profile?.full_name || '',
         avatarUrl: profile?.avatar_url || '',
         banned: !!profile?.banned
       };
       
       setUser(fullUser);
       db.setActiveUser(fullUser);
-      setDbStatus('connected');
-      
-      syncAllData(fullUser.id, finalRole);
 
-      if (finalRole === 'barber') {
+      if (role === 'barber') {
         const bProf = await db.getBarberByUserId(fullUser.id);
         setBarberProfile(bProf || null);
       }
-      
-      return fullUser;
-    } catch (err: any) {
-      console.error("Auth Error:", err);
-      return null;
+
+      // Provjeri push permisije nakon prijave
+      if (Notification.permission === 'default' && !localStorage.getItem('trimly_push_enabled')) {
+        setTimeout(() => setShowPushPrompt(true), 3000);
+      }
+
+    } catch (err) {
+      console.error("Auth fetch error:", err);
     } finally {
       setIsInitializing(false);
     }
-  }, [syncAllData]);
+  }, [lang, showToast]);
 
   useEffect(() => {
-    let mounted = true;
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && mounted) {
-          await handleAuthUser(session.user);
-        } else if (mounted) {
-          setIsInitializing(false);
-        }
-      } catch (e) {
-        if (mounted) setIsInitializing(false);
-      }
+    const handleGlobalToast = (e: any) => {
+      if (e.detail) showToast(e.detail.message, e.detail.type);
     };
+    window.addEventListener('app-show-toast', handleGlobalToast as any);
 
-    checkSession();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) handleAuthUser(session.user);
+      else setIsInitializing(false);
+    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        if (!session.user.email_confirmed_at) {
-          localStorage.setItem('trimly_awaiting_verification', 'true');
-          setUser(null);
-          setActiveTab('register');
-        } else {
-          handleAuthUser(session.user);
-        }
-      } else if (event === 'SIGNED_OUT') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) handleAuthUser(session.user);
+      else {
         setUser(null);
         setBarberProfile(null);
+        setIsAwaitingVerify(false);
         setIsInitializing(false);
-        localStorage.removeItem('trimly_awaiting_verification');
-        localStorage.removeItem('trimly_pending_email');
-        localStorage.removeItem('trimly_pending_role');
       }
     });
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('app-show-toast', handleGlobalToast as any);
     };
-  }, [handleAuthUser]);
+  }, [handleAuthUser, showToast]);
 
   const handleLogout = async () => {
-    setIsInitializing(true);
     await supabase.auth.signOut();
-    setUser(null);
-    setBarberProfile(null);
-    setActiveTab('home');
-    localStorage.removeItem('trimly_awaiting_verification');
-    setIsInitializing(false);
+    localStorage.clear();
+    window.location.reload();
   };
 
-  const renderView = () => {
-    const isAwaiting = localStorage.getItem('trimly_awaiting_verification') === 'true';
+  if (isInitializing) {
+    return (
+      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-12">
+        <Loader2 className="animate-spin text-[#D4AF37] mb-4" size={48} />
+        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest italic text-center">Trimly Zagreb Network...</span>
+      </div>
+    );
+  }
 
-    if (!user || isAwaiting) {
-      if (activeTab === 'register' || isAwaiting) {
-        return <RegisterScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('login')} dbStatus={dbStatus} />;
-      }
-      return <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('register')} dbStatus={dbStatus} />;
+  const mainContent = () => {
+    if (isAwaitingVerify) {
+      return (
+        <RegisterScreen 
+          lang={lang} 
+          setLang={setLang} 
+          onLogin={handleAuthUser} 
+          onToggle={() => {
+            localStorage.removeItem('trimly_awaiting_verification');
+            setIsAwaitingVerify(false);
+          }} 
+          dbStatus="connected" 
+        />
+      );
     }
 
-    if (selectedBarberId) return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
+    if (!user) {
+      return activeTab === 'register' ? (
+        <RegisterScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('login')} dbStatus="connected" />
+      ) : (
+        <LoginScreen lang={lang} setLang={setLang} onLogin={handleAuthUser} onToggle={() => setActiveTab('register')} dbStatus="connected" />
+      );
+    }
+
+    if (selectedBarberId) {
+      return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
+    }
 
     if (user.role === 'customer') {
       switch (activeTab) {
@@ -201,8 +200,8 @@ const App: React.FC = () => {
     }
 
     if (user.role === 'barber') {
-      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => handleAuthUser({id: user.id, email: user.email})} onLogout={handleLogout} />;
-      if (!barberProfile.approved) return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={async () => { await handleAuthUser({id: user.id, email: user.email}); }} />;
+      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => window.location.reload()} onLogout={handleLogout} />;
+      if (!barberProfile.approved) return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={async () => window.location.reload()} />;
       
       switch (activeTab) {
         case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
@@ -223,20 +222,40 @@ const App: React.FC = () => {
         default: return <AdminDashboard lang={lang} onLogout={handleLogout} />;
       }
     }
+
     return null;
   };
 
-  if (isInitializing) {
-    return (
-      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-12">
-        <Loader2 className="animate-spin text-[#D4AF37] mb-4" size={48} />
-        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest italic text-center">Trimly Zagreb</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full w-full bg-black">
+    <div className="h-full w-full bg-black overflow-hidden relative">
+      {/* GLOBAL TOAST PORTAL */}
+      <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none flex flex-col items-center pt-14 px-6 gap-3">
+        {/* PUSH NOTIFICATION PROMPT - DYNAMIC ISLAND STYLE */}
+        {showPushPrompt && (
+          <div className="w-full max-w-sm pointer-events-auto animate-lux-fade origin-top">
+             <div className="p-4 bg-zinc-900 border border-[#D4AF37]/40 rounded-[2rem] shadow-2xl flex items-center justify-between gap-4 premium-blur">
+                <div className="flex items-center gap-4">
+                   <div className="w-10 h-10 bg-[#D4AF37] rounded-xl flex items-center justify-center text-black">
+                      <BellRing size={20} />
+                   </div>
+                   <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-white uppercase italic tracking-tighter">Ostani u tijeku</span>
+                      <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Aktiviraj sistemske obavijesti</span>
+                   </div>
+                </div>
+                <div className="flex gap-2">
+                   <button onClick={() => setShowPushPrompt(false)} className="px-4 py-2 text-[8px] font-black text-zinc-600 uppercase tracking-widest">Kasnije</button>
+                   <button onClick={requestPushPermission} className="px-5 py-2 bg-[#D4AF37] text-black rounded-xl text-[8px] font-black uppercase tracking-widest shadow-xl">Aktiviraj</button>
+                </div>
+             </div>
+          </div>
+        )}
+        
+        {toasts.map(t => (
+          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
+        ))}
+      </div>
+
       {user ? (
         <Layout 
           role={user.role} 
@@ -247,17 +266,9 @@ const App: React.FC = () => {
           hideShell={!!selectedBarberId || (user.role === 'barber' && barberProfile && !barberProfile.approved)} 
           title={user.role === 'admin' ? 'Network Command' : user.role === 'barber' ? 'Barber Hub' : 'Trimly Zagreb'}
         >
-          {renderView()}
+          {mainContent()}
         </Layout>
-      ) : (
-        renderView()
-      )}
-      
-      <div className="fixed top-12 left-4 right-4 z-[999] flex flex-col gap-3 pointer-events-none">
-        {toasts.map(t => (
-          <Toast key={t.id} message={t.message} type={t.type} onClose={() => removeToast(t.id)} />
-        ))}
-      </div>
+      ) : mainContent()}
     </div>
   );
 };

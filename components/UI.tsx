@@ -72,17 +72,28 @@ export const Toast: React.FC<{
   }, [onClose]);
 
   return (
-    <div className="w-full animate-lux-fade pointer-events-auto">
-      <div className={`p-4 rounded-2xl flex items-center justify-between border premium-blur ios-shadow ${
-        type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_10px_30px_rgba(16,185,129,0.1)]' : 'bg-red-500/10 border-red-500/20 shadow-[0_10px_30px_rgba(239,68,68,0.1)]'
+    <div className="w-full max-w-sm pointer-events-auto animate-slide-up origin-top">
+      <div className={`p-4 pl-5 rounded-[2rem] flex items-center justify-between border shadow-2xl premium-blur ${
+        type === 'success' 
+          ? 'bg-emerald-500/10 border-emerald-500/30' 
+          : 'bg-red-500/10 border-red-500/30'
       }`}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${type === 'success' ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
-            {type === 'success' ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-red-500" />}
+        <div className="flex items-center gap-4 min-w-0">
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+            type === 'success' ? 'bg-emerald-500/20' : 'bg-red-500/20'
+          }`}>
+            {type === 'success' ? <CheckCircle2 size={20} className="text-emerald-400" /> : <AlertCircle size={20} className="text-red-400" />}
           </div>
-          <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none truncate">{message}</span>
+          <p className="text-[10px] font-black text-white uppercase tracking-widest leading-tight truncate">
+            {message}
+          </p>
         </div>
-        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-zinc-600 active:scale-90 transition-all shrink-0"><X size={14} /></button>
+        <button 
+          onClick={onClose} 
+          className="w-10 h-10 flex items-center justify-center text-white/20 active:scale-90 transition-all shrink-0"
+        >
+          <X size={18} />
+        </button>
       </div>
     </div>
   );

@@ -64,8 +64,6 @@ const mapBookingFromDb = (b: any): Booking => ({
   createdAt: b.created_at
 });
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 export const db = {
   getUsers: async (): Promise<User[]> => {
     try {
@@ -81,7 +79,6 @@ export const db = {
       }));
       _usersRegistry = users;
       localStorage.setItem('trimly_users_cache', JSON.stringify(users));
-      window.dispatchEvent(new CustomEvent('users-registry-updated', { detail: { users } }));
       return users;
     } catch (e) { return db.getUsersSync(); }
   },
@@ -91,14 +88,10 @@ export const db = {
     return cached ? JSON.parse(cached) : [];
   },
 
-  resolveName: (userId: string, fallback: string): string => {
+  getUserNameById: (userId: string, fallback: string): string => {
     const users = db.getUsersSync();
     const user = users.find(u => u.id === userId);
-    return user?.fullName || fallback || 'Korisnik';
-  },
-
-  getUserNameById: (userId: string, fallback: string): string => {
-    return db.resolveName(userId, fallback);
+    return user?.fullName || fallback;
   },
 
   updateProfileDetails: async (userId: string, updates: { fullName?: string, avatarUrl?: string }) => {
@@ -114,64 +107,28 @@ export const db = {
         await supabase.from('barbers').update({ full_name: updates.fullName }).eq('user_id', userId);
       }
 
-      await db.getUsers();
-      
-      const currentActive = db.getActiveUser();
-      if (currentActive && currentActive.id === userId) {
-        db.setActiveUser({ ...currentActive, ...updates });
-      }
-      
-      window.dispatchEvent(new Event('user-profile-updated'));
+      window.dispatchEvent(new CustomEvent('app-show-toast', { detail: { message: 'Profil ažuriran!', type: 'success' } }));
       return { success: true };
     } catch (err: any) { return { success: false, error: err.message }; }
   },
 
-  updateProfileRole: async (userId: string, role: string, retries = 3) => {
-    const cleanRole = role.toLowerCase().trim();
-    for (let i = 0; i < retries; i++) {
-      try {
-        const { error } = await supabase.from('profiles').update({ role: cleanRole }).eq('id', userId);
-        if (!error) {
-          await db.getUsers(); 
-          return { success: true };
-        }
-        await sleep(500);
-      } catch (err: any) {
-        if (i === retries - 1) return { success: false, error: err.message };
-      }
-    }
-    return { success: false, error: "Failed to update role" };
+  updateProfileRole: async (userId: string, role: string) => {
+    const { error } = await supabase.from('profiles').update({ role: role.toLowerCase().trim() }).eq('id', userId);
+    return { success: !error, error: error?.message };
   },
 
   setUserBanStatus: async (userId: string, banned: boolean) => {
-    try {
-      const { error } = await supabase.from('profiles').update({ banned }).eq('id', userId);
-      await db.getUsers();
-      return { success: !error, error: error?.message };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const { error } = await supabase.from('profiles').update({ banned }).eq('id', userId);
+    return { success: !error, error: error?.message };
   },
 
-  deleteAccount: async (userId: string) => {
+  deleteAccount: async (userId: string): Promise<boolean> => {
     try {
-      // Prvo provjeravamo je li korisnik barber
-      const { data: barber } = await supabase.from('barbers').select('id').eq('user_id', userId).maybeSingle();
-      
-      if (barber) {
-        // Obriši sve vezano uz barbera (iako cascade to rješava, ovdje smo eksplicitni)
-        await supabase.from('services').delete().eq('barber_id', barber.id);
-        await supabase.from('reviews').delete().eq('barber_id', barber.id);
-        await supabase.from('bookings').delete().eq('barber_id', barber.id);
-        await supabase.from('barbers').delete().eq('id', barber.id);
-      }
-      
-      // Obriši profile (ovo će ujedno obrisati i ostale ovisnosti)
       await supabase.from('profiles').delete().eq('id', userId);
-      
-      // Napomena: Ovo ne briše korisnika iz auth.users tablice (to može samo Admin API ili Dashboard)
+      await supabase.from('barbers').delete().eq('user_id', userId);
       return true;
-    } catch (e) { 
-      console.error("Delete account error:", e);
-      return false; 
+    } catch (err) {
+      return false;
     }
   },
 
@@ -196,18 +153,8 @@ export const db = {
   },
 
   getBarberByUserId: async (userId: string): Promise<BarberProfile | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('barbers')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? mapBarberFromDb(data) : null;
-    } catch (e) {
-      const cached = db.getBarbersSync();
-      return cached.find(b => b.userId === userId) || null;
-    }
+    const { data } = await supabase.from('barbers').select('*').eq('user_id', userId).maybeSingle();
+    return data ? mapBarberFromDb(data) : null;
   },
 
   getBarbersSync: (): BarberProfile[] => {
@@ -219,40 +166,27 @@ export const db = {
     try {
       const dbData = mapBarberToDb(barber);
       const { data: existing } = await supabase.from('barbers').select('id').eq('user_id', barber.userId).maybeSingle();
-      
-      let error;
       if (existing) {
-        const { error: updateError } = await supabase.from('barbers').update(dbData).eq('user_id', barber.userId);
-        error = updateError;
+        const { error } = await supabase.from('barbers').update(dbData).eq('user_id', barber.userId);
+        if (error) throw error;
       } else {
-        const { error: insertError } = await supabase.from('barbers').insert(dbData);
-        error = insertError;
+        const { error } = await supabase.from('barbers').insert(dbData);
+        if (error) throw error;
       }
-
-      if (error) throw error;
-      if (barber.userId && barber.fullName) {
-        await supabase.from('profiles').update({ full_name: barber.fullName }).eq('id', barber.userId);
-      }
-      await db.getBarbers(); 
-      await db.getUsers();
       return { success: true };
     } catch (err: any) { 
-      console.error("DB Save Barbers Error:", err);
       return { success: false, error: err.message }; 
     }
   },
 
   approveBarber: async (barberId: string, userId: string) => {
     try {
-      const { error: bError } = await supabase.from('barbers').update({ approved: true }).eq('id', barberId);
-      if (bError) throw bError;
-      const { error: pError } = await supabase.from('profiles').update({ role: 'barber' }).eq('id', userId);
-      localStorage.removeItem('trimly_barbers_cache');
-      localStorage.removeItem('trimly_users_cache');
-      await Promise.all([db.getBarbers(), db.getUsers()]);
+      const { error: bErr } = await supabase.from('barbers').update({ approved: true }).eq('id', barberId);
+      if (bErr) throw bErr;
+      const { error: pErr } = await supabase.from('profiles').update({ role: 'barber' }).eq('id', userId);
+      if (pErr) throw pErr;
       return { success: true };
     } catch (err: any) { 
-      console.error("Approve error:", err);
       return { success: false, error: err.message }; 
     }
   },
@@ -272,17 +206,11 @@ export const db = {
         description: s.description,
         imageUrl: s.image_url
       }));
-      
-      if (!barberId) {
-        localStorage.setItem('trimly_services_cache', JSON.stringify(mapped));
-      } else {
-        const cached = db.getServicesSync();
-        const otherBarbersServices = cached.filter(s => s.barberId !== barberId);
-        localStorage.setItem('trimly_services_cache', JSON.stringify([...otherBarbersServices, ...mapped]));
-      }
-      
+      localStorage.setItem('trimly_services_cache', JSON.stringify(mapped));
       return mapped;
-    } catch (e) { return db.getServicesSync(); }
+    } catch (e) {
+      return db.getServicesSync();
+    }
   },
 
   getServicesSync: (): Service[] => {
@@ -291,29 +219,22 @@ export const db = {
   },
 
   addService: async (service: Service) => {
-    try {
-      const dbData = {
-        id: service.id,
-        barber_id: service.barberId,
-        name: service.name,
-        price: service.price,
-        duration: service.duration,
-        description: service.description,
-        image_url: service.imageUrl
-      };
-      const { error } = await supabase.from('services').insert(dbData);
-      if (error) throw error;
-      await db.getServices(service.barberId);
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const dbData = {
+      id: service.id,
+      barber_id: service.barberId,
+      name: service.name,
+      price: service.price,
+      duration: service.duration,
+      description: service.description,
+      image_url: service.imageUrl
+    };
+    const { error } = await supabase.from('services').insert(dbData);
+    return { success: !error, error: error?.message };
   },
 
   deleteService: async (id: string) => {
-    try {
-      const { error } = await supabase.from('services').delete().eq('id', id);
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const { error } = await supabase.from('services').delete().eq('id', id);
+    return { success: !error, error: error?.message };
   },
 
   getBookings: async (userId?: string, role?: string): Promise<Booking[]> => {
@@ -328,7 +249,9 @@ export const db = {
       const mapped = (data || []).map(mapBookingFromDb);
       localStorage.setItem('trimly_bookings_cache', JSON.stringify(mapped));
       return mapped;
-    } catch (e) { return db.getBookingsSync(); }
+    } catch (e) {
+      return db.getBookingsSync();
+    }
   },
 
   getBookingsSync: (): Booking[] => {
@@ -337,73 +260,49 @@ export const db = {
   },
 
   createBooking: async (booking: any) => {
-    try {
-      const { error } = await supabase.from('bookings').insert({
-        id: booking.id,
-        customer_id: booking.customerId,
-        customer_name: booking.customerName,
-        customer_email: booking.customerEmail,
-        barber_id: booking.barberId,
-        service_id: booking.serviceId,
-        service_name: booking.serviceName,
-        date: booking.date,
-        time: booking.time,
-        price: booking.price,
-        status: booking.status || 'pending'
-      });
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const { error } = await supabase.from('bookings').insert({
+      id: booking.id,
+      customer_id: booking.customerId,
+      customer_name: booking.customerName,
+      customer_email: booking.customerEmail,
+      barber_id: booking.barberId,
+      service_id: booking.serviceId,
+      service_name: booking.serviceName,
+      date: booking.date,
+      time: booking.time,
+      price: booking.price,
+      status: 'pending'
+    });
+    return { success: !error, error: error?.message };
   },
 
   updateBookingStatus: async (bookingId: string, status: string) => {
-    try {
-      const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
-  },
-
-  deleteBooking: async (id: string) => {
-    try {
-      const { error } = await supabase.from('bookings').delete().eq('id', id);
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
+    return { success: !error, error: error?.message };
   },
 
   getReviews: async (barberId?: string): Promise<Review[]> => {
     try {
       let query = supabase.from('reviews').select('*');
       if (barberId) query = query.eq('barber_id', barberId);
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error } = await query;
       if (error) throw error;
       const mapped = (data || []).map((r: any) => ({
         id: r.id,
-        bookingId: r.booking_id,
-        barberId: r.barber_id,
-        customerId: r.customer_id,
-        customerName: r.customer_name,
-        customerEmail: r.customer_email,
+        booking_id: r.booking_id,
+        barber_id: r.barber_id,
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        customer_email: r.customer_email,
         rating: r.rating,
         comment: r.comment,
-        createdAt: r.created_at
+        created_at: r.created_at
       }));
-
-      const cachedStr = localStorage.getItem('trimly_reviews_cache');
-      const cached = cachedStr ? JSON.parse(cachedStr) : [];
-      
-      let newCache;
-      if (barberId) {
-        const others = cached.filter((r: Review) => r.barberId !== barberId);
-        newCache = [...others, ...mapped];
-      } else {
-        newCache = mapped;
-      }
-      
-      localStorage.setItem('trimly_reviews_cache', JSON.stringify(newCache));
+      localStorage.setItem('trimly_reviews_cache', JSON.stringify(mapped));
       return mapped;
-    } catch (e) { return db.getReviewsSync(); }
+    } catch (e) {
+      return db.getReviewsSync();
+    }
   },
 
   getReviewsSync: (): Review[] => {
@@ -412,21 +311,17 @@ export const db = {
   },
 
   createReview: async (review: Review) => {
-    try {
-      const { error } = await supabase.from('reviews').insert({
-        id: review.id,
-        booking_id: review.bookingId,
-        barber_id: review.barberId,
-        customer_id: review.customerId,
-        customer_name: review.customerName,
-        customer_email: review.customerEmail,
-        rating: review.rating,
-        comment: review.comment,
-        created_at: review.createdAt || new Date().toISOString()
-      });
-      if (error) throw error;
-      window.dispatchEvent(new Event('reviews-updated'));
-      return { success: true };
-    } catch (err: any) { return { success: false, error: err.message }; }
+    const { error } = await supabase.from('reviews').insert({
+      id: review.id,
+      booking_id: review.bookingId,
+      barber_id: review.barberId,
+      customer_id: review.customerId,
+      customer_name: review.customerName,
+      customer_email: review.customerEmail,
+      rating: review.rating,
+      comment: review.comment,
+      created_at: new Date().toISOString()
+    });
+    return { success: !error, error: error?.message };
   },
 };
