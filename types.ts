@@ -62,7 +62,7 @@ export interface Service {
   imageUrl?: string;
 }
 
-export type BookingStatus = 'pending' | 'accepted' | 'rejected' | 'completed' | 'cancelled';
+export type BookingStatus = 'pending' | 'accepted' | 'rejected' | 'completed' | 'cancelled' | 'no-show';
 
 export interface Booking {
   id: string;

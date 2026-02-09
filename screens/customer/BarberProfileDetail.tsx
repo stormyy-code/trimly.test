@@ -4,7 +4,7 @@ import { db } from '../../store/database';
 import { Service, Booking, User, WorkingDay, Review } from '../../types';
 import { Button, Card, Badge, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare, BarChart3, AlertTriangle, Mail, User as UserIcon, ZoomIn, Users } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, Clock, Heart, Info, ChevronRight, Scissors, Hourglass, Phone, Navigation, X, Images, Loader2, MessageSquare, AlertTriangle, Mail, User as UserIcon, ZoomIn, Users } from 'lucide-react';
 
 interface BarberProfileDetailProps {
   barberId: string;
@@ -70,21 +70,10 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     };
   }, [barberId]);
 
-  if (!barber) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-10 text-center">
-        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px] mb-6">Profil nije pronađen</p>
-        <Button onClick={onBack}>Povratak</Button>
-      </div>
-    );
-  }
+  if (!barber) return null;
 
   const barberBookings = db.getBookingsSync().filter(b => b.barberId === barberId);
-  
-  const totalCuts = barberBookings.filter(b => b.status === 'completed').length;
-  const avgRatingValue = reviews.length 
-    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)
-    : 0;
+  const avgRatingValue = reviews.length ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length) : 0;
   const avgRating = avgRatingValue.toFixed(1);
 
   const timeSlots = useMemo(() => {
@@ -114,8 +103,6 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         competitionMap[b.time] = (competitionMap[b.time] || 0) + 1;
       });
 
-    const breaks = dayConfig.breaks || [];
-
     const timeToMinutes = (tStr: string) => {
       const p = tStr.split(':');
       return (parseInt(p[0]) * 60) + parseInt(p[1]);
@@ -132,20 +119,12 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
 
     while (current + interval <= endTimeInMinutes) {
       const timeStr = minutesToTime(current);
-      const isDuringBreak = breaks.some(brk => {
-        const bStart = timeToMinutes(brk.startTime);
-        const bEnd = timeToMinutes(brk.endTime);
-        return current >= bStart && current < bEnd;
+      slots.push({
+        time: timeStr,
+        isTaken: takenTimes.includes(timeStr),
+        isRequested: requestedByMe.includes(timeStr),
+        competitionCount: competitionMap[timeStr] || 0
       });
-
-      if (!isDuringBreak) {
-        slots.push({
-          time: timeStr,
-          isTaken: takenTimes.includes(timeStr),
-          isRequested: requestedByMe.includes(timeStr),
-          competitionCount: competitionMap[timeStr] || 0
-        });
-      }
       current += interval;
     }
     return slots;
@@ -168,10 +147,8 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
   const handleBook = async () => {
     if (!selectedService || !selectedDate || !selectedTime || !barber) return;
     setLoading(true);
-
     try {
       const finalCustomerName = db.getUserNameById(user.id, user.fullName || user.email.split('@')[0]);
-
       const newBooking: Booking = {
         id: crypto.randomUUID(),
         customerId: user.id,
@@ -186,42 +163,29 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
         status: 'pending',
         createdAt: new Date().toISOString()
       };
-
       const result = await db.createBooking(newBooking);
-      if (result.success) {
-        setStep('success');
-      } else {
-        setToast({ 
-          message: lang === 'hr' ? `Rezervacija nije uspjela: ${result.error}` : `Booking failed: ${result.error}`, 
-          type: 'error' 
-        });
-      }
+      if (result.success) setStep('success');
+      else setToast({ message: 'Greška pri slanju.', type: 'error' });
     } catch (err: any) {
-      setToast({ 
-        message: lang === 'hr' ? `Greška: ${err.message}` : `Error: ${err.message}`, 
-        type: 'error' 
-      });
+      setToast({ message: 'Greška!', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const SafeImage = ({ src, className, isAvatar = false }: { src: string, className: string, isAvatar?: boolean }) => {
-    const [err, setErr] = useState(false);
-    const fb = isAvatar ? "https://i.ibb.co/C5fL3Pz/trimly-logo.png" : "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=600";
-    return <img src={err || !src ? fb : src} onError={() => setErr(true)} className={`${className} object-cover w-full h-full`} alt="" />;
-  };
+  const selectedSlot = useMemo(() => timeSlots.find(s => s.time === selectedTime), [timeSlots, selectedTime]);
+  const hasCompetition = selectedSlot && selectedSlot.competitionCount > 0;
 
   if (step === 'success') return (
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black p-10 text-center animate-lux-fade">
-      <div className="w-24 h-24 bg-zinc-900 rounded-[2.5rem] border border-[#D4AF37]/30 flex items-center justify-center relative z-10 shadow-2xl mb-8">
+      <div className="w-24 h-24 bg-zinc-900 rounded-[2.5rem] border border-[#D4AF37]/30 flex items-center justify-center shadow-2xl mb-8">
         <Hourglass className="text-[#D4AF37] animate-pulse" size={40} />
       </div>
-      <h2 className="text-white font-black text-2xl italic uppercase tracking-tighter">{lang === 'hr' ? 'UPIT POSLAN!' : 'REQUEST SENT!'}</h2>
+      <h2 className="text-white font-black text-2xl italic uppercase tracking-tighter">ZAHTJEV POSLAN!</h2>
       <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mt-6 max-w-[240px] leading-relaxed">
-        {lang === 'hr' ? 'Više klijenata može tražiti ovaj termin. Barber će odabrati koga prihvaća, o čemu ćete dobiti obavijest.' : 'Multiple clients can request this slot. The barber will choose who to accept, and you will be notified.'}
+        Barber će odabrati klijenta za ovaj termin. Obavijestit ćemo vas čim status bude ažuriran.
       </p>
-      <Button onClick={onBack} className="mt-12 w-full h-18 text-[11px] font-black tracking-widest uppercase">Završi</Button>
+      <Button onClick={onBack} className="mt-12 w-full h-18 text-[11px] font-black uppercase">Završi</Button>
     </div>
   );
 
@@ -229,161 +193,95 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
     <div className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto animate-lux-fade scrollbar-hide pb-32">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {selectedGalleryImg && (
-        <div className="fixed inset-0 z-[300] bg-black/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-lux-fade" onClick={() => setSelectedGalleryImg(null)}>
-           <button className="absolute top-10 right-10 text-white z-[310] bg-white/10 p-4 rounded-full"><X size={24} /></button>
-           <img src={selectedGalleryImg} className="max-w-full max-h-[80vh] rounded-[2rem] shadow-2xl border border-white/10" alt="Gallery preview" />
-        </div>
-      )}
-
       <div className="sticky top-0 left-0 right-0 z-50 bg-black/90 premium-blur border-b border-white/5 px-6 py-4 flex justify-between items-center pt-safe">
-        <button onClick={onBack} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-400 border border-white/5">
-          <ArrowLeft size={18} />
-        </button>
+        <button onClick={onBack} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-400 border border-white/5"><ArrowLeft size={18} /></button>
         <div className="flex gap-2">
-           {barber.phoneNumber && (
-             <a href={`tel:${barber.phoneNumber}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl">
-               <Phone size={16} className="text-black" />
-             </a>
-           )}
-           <button className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-500 border border-white/5">
-             <Heart size={18} />
-           </button>
+           {barber.phoneNumber && <a href={`tel:${barber.phoneNumber}`} className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center"><Phone size={16} className="text-black" /></a>}
+           <button className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-zinc-500"><Heart size={18} /></button>
         </div>
       </div>
 
-      <div className="px-6 py-6 space-y-10 min-h-screen">
+      <div className="px-6 py-8 space-y-10 min-h-screen">
         <div className="flex flex-col items-start gap-6">
-          <div className="w-24 h-24 bg-zinc-900 border border-white/10 rounded-[1.75rem] overflow-hidden shadow-2xl flex-shrink-0">
-            <SafeImage src={barber.profilePicture} className="" isAvatar={true} />
+          <div className="w-24 h-24 bg-zinc-900 border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl flex-shrink-0">
+            <img src={barber.profilePicture} className="w-full h-full object-cover" />
           </div>
-          
           <div className="flex justify-between items-end w-full">
             <div className="space-y-4">
-              <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none">
-                {barber.fullName}
-              </h1>
-              <div className="flex flex-wrap gap-2">
+              <h1 className="text-3xl font-black tracking-tighter uppercase italic leading-none">{barber.fullName}</h1>
+              <div className="flex gap-2">
                 <Badge variant="gold"><Star size={10} className="mr-1 fill-current" /> {avgRating}</Badge>
-                <Badge variant="neutral"><Scissors size={10} className="mr-1" /> {totalCuts} šišanja</Badge>
+                <Badge variant="neutral">{barber.neighborhood}</Badge>
               </div>
             </div>
             <div className="bg-[#D4AF37] text-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest self-start">{barber.workMode}</div>
           </div>
         </div>
 
-        <div className="flex bg-zinc-950 p-1.5 rounded-3xl border border-white/5">
-           <button onClick={() => setActiveTab('info')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'info' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Info</button>
-           <button onClick={() => setActiveTab('services')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'services' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Usluge</button>
-           <button onClick={() => setActiveTab('reviews')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'reviews' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Recenzije</button>
+        <div className="flex bg-zinc-950 p-1 rounded-3xl border border-white/5">
+           <button onClick={() => setActiveTab('info')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'info' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Info</button>
+           <button onClick={() => setActiveTab('services')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'services' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Usluge</button>
+           <button onClick={() => setActiveTab('reviews')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-2xl transition-all ${activeTab === 'reviews' ? 'bg-white/10 text-[#D4AF37]' : 'text-zinc-600'}`}>Recenzije</button>
         </div>
 
-        {activeTab === 'info' ? (
-          <div className="space-y-12 animate-lux-fade pb-20">
-             {barber.gallery && barber.gallery.length > 0 && (
-               <section className="space-y-4">
-                  <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Images size={14} className="text-[#D4AF37]" /> GALERIJA RADOVA</div>
-                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6">
-                    {barber.gallery.map((img, i) => (
-                      <div key={i} onClick={() => setSelectedGalleryImg(img)} className="relative shrink-0 w-48 aspect-[4/5] rounded-[2rem] overflow-hidden border border-white/5 shadow-2xl active:scale-95 transition-all">
-                        <SafeImage src={img} className="" />
-                        <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md p-2 rounded-xl border border-white/10">
-                          <ZoomIn size={14} className="text-white" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-               </section>
-             )}
-
-             <section className="space-y-4">
-                <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><MapPin size={14} className="text-[#D4AF37]" /> LOKACIJA</div>
-                <Card className="p-6 bg-zinc-900/40 border-white/5">
-                  <p className="text-white font-black text-sm italic mb-4">
-                    {barber.address}, {barber.city || 'Zagreb'}
-                  </p>
-                  <Button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(barber.address)}`, '_blank')} variant="secondary" className="h-14 text-[9px] flex items-center justify-center gap-2">
-                    <Navigation size={14} /> Otvori u Google Kartama
-                  </Button>
-                </Card>
-             </section>
-             
-             <section className="space-y-4">
-                <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[9px] tracking-[0.3em]"><Info size={14} className="text-[#D4AF37]" /> BIO</div>
-                <p className="text-zinc-400 leading-relaxed italic text-xs font-bold px-6 py-5 bg-zinc-950 rounded-3xl border border-white/5">{barber.bio || 'Barber nije dodao opis.'}</p>
-             </section>
-          </div>
-        ) : activeTab === 'services' ? (
+        {activeTab === 'services' ? (
           <div className="space-y-4 animate-lux-fade pb-20">
-            {servicesLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-30">
-                <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
-                <span className="text-[9px] font-black uppercase tracking-widest">Učitavanje ponude...</span>
-              </div>
-            ) : services.length === 0 ? (
-              <div className="py-24 text-center opacity-20 italic text-xs">Ovaj barber trenutno nema objavljenih usluga.</div>
-            ) : services.map(s => (
-              <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-4 flex gap-4 items-center bg-zinc-950/50 border transition-all rounded-[2.5rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 shadow-2xl scale-[1.02]' : 'border-white/5'}`}>
-                <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0">
-                  <SafeImage src={s.imageUrl || ''} className="" />
-                </div>
+            {services.map(s => (
+              <Card key={s.id} onClick={() => setSelectedService(s)} className={`p-4 flex gap-4 items-center bg-zinc-950/50 border transition-all rounded-[2.25rem] ${selectedService?.id === s.id ? 'border-[#D4AF37] bg-[#D4AF37]/5 scale-[1.02]' : 'border-white/5'}`}>
+                <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0"><img src={s.imageUrl} className="w-full h-full object-cover" /></div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-black text-lg uppercase tracking-tighter text-white italic truncate leading-none">{s.name}</h4>
+                  <h4 className="font-black text-base uppercase tracking-tighter text-white italic truncate leading-none">{s.name}</h4>
                   <div className="flex items-center gap-4 mt-2">
                     <span className="text-[#D4AF37] text-sm font-black">{s.price}€</span>
-                    <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest flex items-center gap-1"><Clock size={10} /> {s.duration || '45 min'}</span>
+                    <span className="text-zinc-600 text-[8px] font-black uppercase tracking-widest flex items-center gap-1"><Clock size={10} /> {s.duration || '45 min'}</span>
                   </div>
                 </div>
-                <ChevronRight size={20} className={selectedService?.id === s.id ? 'text-[#D4AF37]' : 'text-zinc-800'} />
+                <ChevronRight size={18} className={selectedService?.id === s.id ? 'text-[#D4AF37]' : 'text-zinc-800'} />
               </Card>
             ))}
           </div>
+        ) : activeTab === 'reviews' ? (
+          <div className="space-y-4 animate-lux-fade pb-20">
+             {reviews.map(r => (
+               <Card key={r.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-3">
+                 <div className="flex justify-between items-center">
+                    <span className="text-xs font-black text-white italic uppercase">{r.customerName}</span>
+                    <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={8} className={s <= r.rating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'} />)}</div>
+                 </div>
+                 <p className="text-zinc-500 text-xs italic">"{r.comment}"</p>
+               </Card>
+             ))}
+          </div>
         ) : (
-          <div className="space-y-6 animate-lux-fade pb-20">
-             {reviewsLoading ? (
-               <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-30">
-                 <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
-                 <span className="text-[9px] font-black uppercase tracking-widest">Dohvaćanje ocjena...</span>
-               </div>
-             ) : reviews.length === 0 ? (
-               <div className="py-24 text-center opacity-20 italic text-xs">Nema recenzija.</div>
-             ) : reviews.map(r => {
-               const currentUser = allUsers.find(u => u.id === r.customerId);
-               const displayName = currentUser?.fullName || r.customerName || 'Klijent';
-               
-               return (
-                 <Card key={r.id} className="p-6 bg-zinc-950/30 border-white/5 rounded-[2rem] space-y-3">
-                   <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        {currentUser?.avatarUrl && (
-                          <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10">
-                            <img src={currentUser.avatarUrl} className="w-full h-full object-cover" />
-                          </div>
-                        )}
-                        <span className="text-xs font-black text-white italic uppercase">{displayName}</span>
-                      </div>
-                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <Star key={s} size={10} className={s <= r.rating ? 'text-[#D4AF37] fill-[#D4AF37]' : 'text-zinc-800'} />)}</div>
-                   </div>
-                   <p className="text-zinc-400 text-xs italic">"{r.comment}"</p>
-                 </Card>
-               );
-             })}
+          <div className="space-y-10 animate-lux-fade pb-20">
+             <section className="space-y-4">
+                <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[8px] tracking-widest"><MapPin size={12} className="text-[#D4AF37]" /> LOKACIJA</div>
+                <Card className="p-6 bg-zinc-900/40 border-white/5">
+                  <p className="text-white font-black text-sm italic mb-4">{barber.address}, {barber.city || 'Zagreb'}</p>
+                  <Button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(barber.address)}`, '_blank')} variant="secondary" className="h-14 text-[8px] flex items-center justify-center gap-2">
+                    <Navigation size={12} /> Otvori u Google Kartama
+                  </Button>
+                </Card>
+             </section>
+             <section className="space-y-4">
+                <div className="flex items-center gap-3 text-zinc-600 font-black uppercase text-[8px] tracking-widest"><Info size={12} className="text-[#D4AF37]" /> BIO</div>
+                <p className="text-zinc-500 leading-relaxed italic text-xs font-bold bg-zinc-950 p-6 rounded-[2rem] border border-white/5">{barber.bio || 'Nema opisa.'}</p>
+             </section>
           </div>
         )}
       </div>
 
       {selectedService && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black/95 border-t border-white/10 p-8 z-[150] rounded-t-[3.5rem] shadow-2xl animate-slide-up space-y-8 premium-blur pb-safe">
+        <div className="fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-white/10 p-8 z-[150] rounded-t-[3rem] shadow-[0_-20px_80px_rgba(0,0,0,0.8)] animate-slide-up space-y-8 premium-blur pb-safe">
           <button onClick={() => { setSelectedService(null); setSelectedDate(''); setSelectedTime(''); }} className="absolute top-6 right-8 w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-zinc-500"><X size={18} /></button>
-          <div className="pt-4">
-             <h3 className="text-white font-black text-sm uppercase italic tracking-tighter">Odaberite Termin</h3>
-             <p className="text-[8px] text-zinc-600 font-black uppercase tracking-widest mt-1">Usluga: {selectedService.name}</p>
+          <div className="pt-2">
+             <h3 className="text-white font-black text-sm uppercase italic tracking-tighter">Odaberite Datum</h3>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
             {availableDates.map(d => (
-              <button key={d.full} onClick={() => { setSelectedDate(d.full); setSelectedTime(''); }} className={`shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border ${selectedDate === d.full ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-900 border-white/5 text-zinc-600'}`}>
-                <span className="text-[8px] font-black uppercase tracking-widest opacity-60">{d.dayName}</span>
-                <span className="text-xl font-black italic">{d.dayNum}</span>
+              <button key={d.full} onClick={() => { setSelectedDate(d.full); setSelectedTime(''); }} className={`shrink-0 w-16 h-20 rounded-[1.5rem] flex flex-col items-center justify-center transition-all border ${selectedDate === d.full ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 border-white/5 text-zinc-600'}`}>
+                <span className="text-[7px] font-black uppercase tracking-widest opacity-60">{d.dayName}</span>
+                <span className="text-lg font-black italic">{d.dayNum}</span>
               </button>
             ))}
           </div>
@@ -394,17 +292,19 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
                   key={slot.time} 
                   disabled={slot.isTaken || slot.isRequested} 
                   onClick={() => setSelectedTime(slot.time)} 
-                  className={`relative py-3.5 rounded-xl border text-[9px] font-black transition-all ${
+                  className={`relative py-4 rounded-xl border text-[10px] font-black transition-all ${
                     slot.isTaken 
-                      ? 'bg-red-500/10 text-red-500 border-red-500/20 opacity-50 cursor-not-allowed' 
+                      ? 'bg-red-500/10 text-red-500 border-red-500/20 opacity-40 cursor-not-allowed' 
                       : slot.isRequested
-                        ? 'bg-amber-500/20 text-amber-500 border-amber-500/40 cursor-wait'
+                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
                         : selectedTime === slot.time 
-                          ? 'bg-white text-black border-white' 
-                          : 'bg-zinc-950 text-zinc-600 border-white/5'
+                          ? 'bg-white text-black border-white scale-[1.05] shadow-2xl' 
+                          : slot.competitionCount > 0
+                            ? 'bg-amber-500/5 text-zinc-300 border-amber-500/20'
+                            : 'bg-zinc-950 text-zinc-500 border-white/5'
                   }`}
                 >
-                  {slot.isTaken ? 'ZAUZETO' : slot.isRequested ? 'U OBRADI' : slot.time}
+                  {slot.isTaken ? 'ZAUZETO' : slot.isRequested ? 'OBRADA' : slot.time}
                   {!slot.isTaken && slot.competitionCount > 0 && (
                     <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[7px] px-1.5 rounded-full border border-black flex items-center gap-0.5">
                       <Users size={6} /> {slot.competitionCount}
@@ -414,10 +314,16 @@ const BarberProfileDetail: React.FC<BarberProfileDetailProps> = ({ barberId, onB
               ))}
             </div>
           )}
-          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
-             <AlertTriangle className="text-amber-500 shrink-0" size={16} />
-             <p className="text-[8px] font-black text-white uppercase tracking-widest">Više klijenata može tražiti isti slot. Barber bira tko dobiva termin.</p>
-          </div>
+
+          {hasCompetition && (
+            <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex items-center gap-3 animate-lux-fade">
+               <AlertTriangle className="text-amber-500 shrink-0" size={14} />
+               <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest leading-relaxed">
+                 Ovaj termin je tražen od više klijenata. Barber će odlučiti kome ide termin.
+               </p>
+            </div>
+          )}
+
           <Button disabled={!selectedTime || loading} loading={loading} onClick={handleBook} className="w-full h-18 text-xs font-black">Pošalji Zahtjev</Button>
         </div>
       )}

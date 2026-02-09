@@ -38,7 +38,10 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('hr'); 
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Za force-refresh komponenti bez reloada stranice
   const [isAwaitingVerify, setIsAwaitingVerify] = useState(() => localStorage.getItem('trimly_awaiting_verification') === 'true');
+
+  const triggerRefresh = useCallback(() => setRefreshKey(prev => prev + 1), []);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -143,13 +146,28 @@ const App: React.FC = () => {
       subscription.unsubscribe();
       window.removeEventListener('app-show-toast', handleGlobalToast as any);
     };
-  }, [handleAuthUser, showToast]);
+  }, [handleAuthUser, showToast, refreshKey]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = useCallback(async () => {
+    // 1. Očisti lokalne varijable stanja odmah
+    setUser(null);
+    setBarberProfile(null);
+    setSelectedBarberId(null);
+    setActiveTab('home');
+    db.setActiveUser(null);
+    
+    // 2. Očisti memoriju preglednika
     localStorage.clear();
-    window.location.reload();
-  };
+    sessionStorage.clear();
+
+    try {
+      // 3. Pošalji zahtjev za odjavu ali ne čekaj rezultat
+      supabase.auth.signOut();
+    } catch (e) {
+      // Ignoriraj greške mrežnog prekida
+    }
+    // BEZ window.location.reload() ili href promjena
+  }, []);
 
   if (isInitializing) {
     return (
@@ -185,40 +203,40 @@ const App: React.FC = () => {
     }
 
     if (selectedBarberId) {
-      return <BarberProfileDetail lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
+      return <BarberProfileDetail key={refreshKey} lang={lang} barberId={selectedBarberId} onBack={() => setSelectedBarberId(null)} user={user} />;
     }
 
     if (user.role === 'customer') {
       switch (activeTab) {
-        case 'home': return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'bookings': return <CustomerBookings lang={lang} user={user} />;
-        case 'profile': return <CustomerProfile user={user} lang={lang} onLogout={handleLogout} />;
-        default: return <CustomerHome lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'home': return <CustomerHome key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'leaderboard': return <LeaderboardScreen key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'bookings': return <CustomerBookings key={refreshKey} lang={lang} user={user} />;
+        case 'profile': return <CustomerProfile key={refreshKey} user={user} lang={lang} onLogout={handleLogout} />;
+        default: return <CustomerHome key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
       }
     }
 
     if (user.role === 'barber') {
-      if (!barberProfile) return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => window.location.reload()} onLogout={handleLogout} />;
-      if (!barberProfile.approved) return <BarberWaitingRoom lang={lang} onLogout={handleLogout} onRefresh={async () => window.location.reload()} />;
+      if (!barberProfile) return <BarberProfileForm key={refreshKey} lang={lang} userId={user.id} onComplete={triggerRefresh} onLogout={handleLogout} />;
+      if (!barberProfile.approved) return <BarberWaitingRoom key={refreshKey} lang={lang} onLogout={handleLogout} onRefresh={async () => triggerRefresh()} />;
       
       switch (activeTab) {
-        case 'home': return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'schedule': return <BarberAvailability lang={lang} barberId={barberProfile.id} />;
-        case 'services': return <BarberServices lang={lang} barberId={barberProfile.id} />;
-        case 'profile': return <BarberProfileForm lang={lang} userId={user.id} onComplete={() => {}} onLogout={handleLogout} />;
-        default: return <BarberDashboard lang={lang} barberId={barberProfile.id} />;
+        case 'home': return <BarberDashboard key={refreshKey} lang={lang} barberId={barberProfile.id} />;
+        case 'leaderboard': return <LeaderboardScreen key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'schedule': return <BarberAvailability key={refreshKey} lang={lang} barberId={barberProfile.id} />;
+        case 'services': return <BarberServices key={refreshKey} lang={lang} barberId={barberProfile.id} />;
+        case 'profile': return <BarberProfileForm key={refreshKey} userId={user.id} onComplete={triggerRefresh} onLogout={handleLogout} />;
+        default: return <BarberDashboard key={refreshKey} lang={lang} barberId={barberProfile.id} />;
       }
     }
 
     if (user.role === 'admin') {
       switch (activeTab) {
-        case 'home': return <AdminDashboard lang={lang} onLogout={handleLogout} />;
-        case 'leaderboard': return <LeaderboardScreen lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'barbers': return <AdminBarbers lang={lang} onSelectBarber={setSelectedBarberId} />;
-        case 'approvals': return <AdminApprovals lang={lang} />;
-        default: return <AdminDashboard lang={lang} onLogout={handleLogout} />;
+        case 'home': return <AdminDashboard key={refreshKey} lang={lang} onLogout={handleLogout} />;
+        case 'leaderboard': return <LeaderboardScreen key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'barbers': return <AdminBarbers key={refreshKey} lang={lang} onSelectBarber={setSelectedBarberId} />;
+        case 'approvals': return <AdminApprovals key={refreshKey} lang={lang} />;
+        default: return <AdminDashboard key={refreshKey} lang={lang} onLogout={handleLogout} />;
       }
     }
 
@@ -227,7 +245,6 @@ const App: React.FC = () => {
 
   return (
     <div className="h-full w-full bg-black overflow-hidden relative">
-      {/* GLOBAL TOAST PORTAL - ABSOLUTE FIXED TO SCREEN */}
       <div className="fixed top-0 left-0 right-0 z-[10000] pointer-events-none flex flex-col items-center pt-safe px-6 gap-3 pt-6">
         {showPushPrompt && (
           <div className="w-full max-w-sm pointer-events-auto animate-lux-fade origin-top">

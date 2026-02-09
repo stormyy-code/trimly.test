@@ -120,7 +120,8 @@ export const translations = {
     noPending: 'Nema novih rezervacija',
     finalizeCut: 'Završi šišanje',
     accept: 'Prihvati',
-    decline: 'Odbij'
+    decline: 'Odbij',
+    noShow: 'Nije se pojavio'
   },
   en: {
     // Auth
@@ -240,6 +241,7 @@ export const translations = {
     noPending: 'No pending requests',
     finalizeCut: 'Finalize Cut',
     accept: 'Accept',
-    decline: 'Decline'
+    decline: 'Decline',
+    noShow: 'No-show'
   }
 };

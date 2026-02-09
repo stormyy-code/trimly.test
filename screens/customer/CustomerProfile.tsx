@@ -81,7 +81,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
         if (updateResult.success) {
           setProfilePic(result.url);
           setToastMsg({ msg: 'Profilna slika spremljena.', type: 'success' });
-          // Force refresh state via App
           window.dispatchEvent(new Event('user-profile-updated'));
         } else {
           setToastMsg({ msg: 'Slika je učitana ali nije spremljena u bazu.', type: 'error' });
@@ -119,7 +118,6 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
     try {
       const success = await db.deleteAccount(user.id);
       if (success) {
-        await supabase.auth.signOut();
         onLogout();
       } else {
         setToastMsg({ msg: 'Greška pri brisanju računa.', type: 'error' });
@@ -252,7 +250,11 @@ const CustomerProfile: React.FC<CustomerProfileProps> = ({ user, lang, onLogout,
       </section>
 
       <div className="pt-6 px-1">
-        <Button variant="danger" className="w-full h-20 text-[11px] font-black tracking-widest shadow-2xl" onClick={onLogout}>
+        <Button 
+          variant="danger" 
+          className="w-full h-20 text-[11px] font-black tracking-widest shadow-2xl" 
+          onClick={onLogout}
+        >
           <LogOut size={16} className="mr-3" /> {lang === 'hr' ? 'ODJAVI SE IZ MREŽE' : 'LOGOUT NETWORK'}
         </Button>
       </div>
