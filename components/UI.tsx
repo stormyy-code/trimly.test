@@ -30,10 +30,14 @@ export const Button: React.FC<{
   );
 };
 
-export const Card: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className = '', onClick }) => (
+export const Card: React.FC<{ 
+  children: React.ReactNode; 
+  className?: string; 
+  onClick?: (e: React.MouseEvent) => void 
+}> = ({ children, className = '', onClick }) => (
   <div 
     onClick={onClick}
-    className={`bg-zinc-900/50 premium-blur rounded-[2.2rem] sm:rounded-[2.8rem] p-5 sm:p-7 border border-white/[0.08] transition-all duration-300 overflow-hidden ${onClick ? 'cursor-pointer active:scale-[0.98]' : ''} ${className}`}
+    className={`bg-zinc-900/50 premium-blur rounded-[2.2rem] sm:rounded-[2.8rem] p-5 sm:p-7 border border-white/[0.08] transition-all duration-300 overflow-hidden relative ${onClick ? 'cursor-pointer active:scale-[0.98]' : ''} ${className}`}
   >
     {children}
   </div>
@@ -72,27 +76,37 @@ export const Toast: React.FC<{
   }, [onClose]);
 
   return (
-    <div className="w-full max-w-sm pointer-events-auto animate-slide-up origin-top">
-      <div className={`p-4 pl-5 rounded-[2rem] flex items-center justify-between border shadow-2xl premium-blur ${
+    <div 
+      className="animate-slide-up-centered"
+      style={{
+        position: 'fixed',
+        left: '50%',
+        zIndex: 2147483647,
+        width: 'calc(100% - 48px)',
+        maxWidth: '380px',
+        pointerEvents: 'auto'
+      }}
+    >
+      <div className={`p-4 pl-5 rounded-[2.2rem] flex items-center justify-between border shadow-[0_40px_80px_rgba(0,0,0,0.8)] premium-blur ${
         type === 'success' 
-          ? 'bg-emerald-500/10 border-emerald-500/30' 
-          : 'bg-red-500/10 border-red-500/30'
+          ? 'bg-black/95 border-emerald-500/50' 
+          : 'bg-red-950/95 border-red-500/50'
       }`}>
-        <div className="flex items-center gap-4 min-w-0">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+        <div className="flex items-center gap-4 min-w-0 flex-1">
+          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
             type === 'success' ? 'bg-emerald-500/20' : 'bg-red-500/20'
           }`}>
-            {type === 'success' ? <CheckCircle2 size={20} className="text-emerald-400" /> : <AlertCircle size={20} className="text-red-400" />}
+            {type === 'success' ? <CheckCircle2 size={22} className="text-emerald-400" /> : <AlertCircle size={22} className="text-red-400" />}
           </div>
-          <p className="text-[10px] font-black text-white uppercase tracking-widest leading-tight truncate">
+          <p className="text-[11px] font-black text-white uppercase tracking-widest leading-tight truncate">
             {message}
           </p>
         </div>
         <button 
-          onClick={onClose} 
-          className="w-10 h-10 flex items-center justify-center text-white/20 active:scale-90 transition-all shrink-0"
+          onClick={(e) => { e.stopPropagation(); onClose(); }} 
+          className="w-11 h-11 flex items-center justify-center text-white/20 active:scale-90 transition-all shrink-0 ml-2"
         >
-          <X size={18} />
+          <X size={20} />
         </button>
       </div>
     </div>

@@ -32,7 +32,7 @@ export const HAIRCUT_STYLES = [
  * SECURITY CODES 
  */
 export const BARBER_INVITE_CODE = 'BARBERS2026';
-export const ADMIN_INVITE_CODE = 'JELKOVEC2026';
+export const ADMIN_INVITE_CODE = 'ADMIN12';
 
 export const APP_CONFIG = {
   ADMIN_COMMISSION: 0.10,

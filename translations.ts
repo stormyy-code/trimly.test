@@ -114,7 +114,7 @@ export const translations = {
     // Barber
     equity: 'Zarada',
     efficiencyStats: 'Statistika rada',
-    pendingRequests: 'Novi zahtjev',
+    pendingRequests: 'Novi zahtjevi',
     activeCuts: 'U tijeku',
     history: 'Povijest',
     noPending: 'Nema novih rezervacija',

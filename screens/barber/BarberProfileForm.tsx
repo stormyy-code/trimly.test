@@ -6,7 +6,7 @@ import { BarberProfile, WorkMode } from '../../types';
 import { BARBER_INVITE_CODE } from '../../constants';
 import { translations, Language } from '../../translations';
 import { Button, Input, Card, Toast, Badge } from '../../components/UI';
-import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, Scissors, AlertTriangle, Images, MapPin, LogOut, ShieldCheck } from 'lucide-react';
+import { Camera, Plus, Trash2, Loader2, Image as ImageIcon, Copy, CheckCircle2, FileText, Sparkles, Scissors, AlertTriangle, Images, MapPin, LogOut, ShieldCheck, Smartphone, Home } from 'lucide-react';
 import LegalModal from '../../components/LegalModal';
 import SupportModal from '../../components/SupportModal';
 import { supabase } from '../../store/supabase';
@@ -93,8 +93,8 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   };
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (gallery.length >= 5) {
-      setToastMsg({ msg: 'Maksimalno 5 slika.', type: 'error' });
+    if (gallery.length >= 6) {
+      setToastMsg({ msg: 'Maksimalno 6 slika.', type: 'error' });
       return;
     }
     const file = e.target.files?.[0];
@@ -123,7 +123,6 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
     setIsLoading(true);
     setSaveError(null);
     try {
-      // Role update radimo samo ako već nismo odobreni
       if (!isAlreadyApproved) {
         const roleResult = await db.updateProfileRole(userId, 'barber');
         if (!roleResult.success) throw new Error(roleResult.error);
@@ -157,11 +156,10 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
       const result = await db.saveBarbers(profile);
       if (result.success) {
         setToastMsg({ msg: t.done, type: 'success' });
-        await loadExisting(); // Ponovno učitaj da vidimo promjene
-        
-        if (!isAlreadyApproved) {
-          setTimeout(onComplete, 1200);
-        }
+        await loadExisting();
+        setTimeout(() => {
+          onComplete();
+        }, 1200);
       } else {
         throw new Error(result.error);
       }
@@ -193,7 +191,7 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
   };
 
   return (
-    <div className="space-y-10 pb-32 animate-slide-up overflow-x-hidden bg-black min-h-screen">
+    <div className="space-y-10 pb-32 animate-slide-up overflow-x-hidden">
       {toastMsg && <Toast message={toastMsg.msg} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
       
       <header className="px-6 pt-12 text-center space-y-4">
@@ -259,6 +257,26 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
 
             <div className="space-y-4 pt-4">
               <div className="flex items-center gap-3 ml-4">
+                <Smartphone size={14} className="text-[#D4AF37]" />
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Način rada</span>
+              </div>
+              <div className="flex bg-zinc-950 p-1.5 rounded-[1.75rem] border border-white/5">
+                {(['classic', 'mobile', 'both'] as WorkMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setWorkMode(mode)}
+                    className={`flex-1 py-3.5 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all ${
+                      workMode === mode ? 'bg-[#D4AF37] text-black shadow-lg' : 'text-zinc-700'
+                    }`}
+                  >
+                    {mode === 'classic' ? 'CLASSIC' : mode === 'mobile' ? 'MOBILE' : 'CLASSIC/MOBILE'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-4">
+              <div className="flex items-center gap-3 ml-4">
                 <MapPin size={14} className="text-[#D4AF37]" />
                 <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Točna Lokacija Salona</span>
               </div>
@@ -279,9 +297,9 @@ const BarberProfileForm: React.FC<BarberProfileFormProps> = ({ userId, onComplet
              <div className="flex justify-between items-center px-4">
                 <div className="flex items-center gap-2">
                    <Images size={14} className="text-zinc-600" />
-                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova (do 5 slika)</span>
+                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Galerija radova (do 6 slika)</span>
                 </div>
-                {gallery.length < 5 && (
+                {gallery.length < 6 && (
                   <button onClick={() => galleryInputRef.current?.click()} className="text-[#D4AF37] text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 bg-[#D4AF37]/5 px-4 py-2 rounded-xl border border-[#D4AF37]/10 active:scale-95 transition-all"><Plus size={14} /> Dodaj</button>
                 )}
                 <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleGalleryUpload} />

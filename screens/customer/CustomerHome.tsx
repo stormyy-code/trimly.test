@@ -1,23 +1,65 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { db } from '../../store/database';
 import { BarberProfile, User } from '../../types';
 import { Card, Badge } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { Search, Trophy, Sparkles, Crown, ArrowDownNarrowWide, SlidersHorizontal, Scissors, Star, Zap, Loader2, MapPin } from 'lucide-react';
+import { Search, Trophy, Sparkles, Crown, SlidersHorizontal, Star, Heart, ChevronDown } from 'lucide-react';
 
 interface CustomerHomeProps {
   onSelectBarber: (id: string) => void;
   lang: Language;
 }
 
-type SortType = 'recommended' | 'price-low' | 'top-rated';
+type SortType = 'recommended' | 'price-low' | 'top-rated' | 'favorites';
+
+const CustomSelect = ({ value, onChange, options }: { value: string, onChange: (val: any) => void, options: {label: string, value: string}[] }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    window.addEventListener('mousedown', handleClick);
+    return () => window.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+       <button 
+         onClick={() => setIsOpen(!isOpen)}
+         className="w-full flex items-center justify-between bg-zinc-950 border border-white/[0.05] rounded-2xl px-6 py-4 transition-all active:scale-[0.98] outline-none"
+       >
+         <span className="text-[10px] font-black uppercase tracking-widest text-white">{selectedOption?.label}</span>
+         <ChevronDown size={14} className={`text-[#D4AF37] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+       </button>
+       
+       {isOpen && (
+         <div className="absolute top-full left-0 right-0 mt-2 z-[100] bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden animate-lux-fade shadow-[0_30px_60px_rgba(0,0,0,0.8)] premium-blur">
+            {options.map(opt => (
+              <button 
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                className={`w-full text-left px-6 py-4 text-[9px] font-black uppercase tracking-widest transition-colors ${value === opt.value ? 'bg-[#D4AF37] text-black' : 'text-zinc-400 hover:bg-white/5'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+         </div>
+       )}
+    </div>
+  );
+};
 
 const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => {
   const [selectedQuarter, setSelectedQuarter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortType, setSortType] = useState<SortType>('recommended');
   const [users, setUsers] = useState<User[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [refresh, setRefresh] = useState(0);
 
   const t = translations[lang];
@@ -31,6 +73,11 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
         db.getServices()
       ]);
       if (uRes.status === 'fulfilled') setUsers(uRes.value as User[]);
+      const activeUser = db.getActiveUser();
+      if (activeUser) {
+        const storedFavs = localStorage.getItem(`trimly_favs_${activeUser.id}`);
+        if (storedFavs) setFavorites(JSON.parse(storedFavs));
+      }
       setRefresh(prev => prev + 1);
     };
     sync();
@@ -54,7 +101,8 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
       const matchQuarter = selectedQuarter === 'All' || b.neighborhood === selectedQuarter;
       const matchSearch = b.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         b.bio.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchQuarter && matchSearch;
+      const matchFav = sortType === 'favorites' ? favorites.includes(b.id) : true;
+      return matchQuarter && matchSearch && matchFav;
     }).map(barber => {
       const bReviews = allReviews.filter(r => r.barberId === barber.id);
       const bServices = allServices.filter(s => s.barberId === barber.id);
@@ -66,6 +114,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
     switch (sortType) {
       case 'price-low': result.sort((a, b) => (a.minPrice || 999) - (b.minPrice || 999)); break;
       case 'top-rated': result.sort((a, b) => parseFloat(b.avgRating) - parseFloat(a.avgRating)); break;
+      case 'favorites': result.sort((a, b) => b.reviewCount - a.reviewCount); break;
       case 'recommended':
       default: result.sort((a, b) => {
         if (a.featured !== b.featured) return a.featured ? -1 : 1;
@@ -73,7 +122,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
       }); break;
     }
     return result;
-  }, [barbers, allReviews, allServices, selectedQuarter, searchQuery, sortType]);
+  }, [barbers, allReviews, allServices, selectedQuarter, searchQuery, sortType, favorites]);
 
   const SafeImage = ({ src, className }: { src: string, className: string }) => {
     const [error, setError] = useState(false);
@@ -87,7 +136,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
           <div className="space-y-1 text-left">
             <p className="text-[#C5A059] text-[8px] font-black uppercase tracking-[0.4em]">Zagreb Network</p>
             <h2 className="text-3xl font-black text-white flex items-center gap-2 tracking-tighter italic uppercase leading-none">
-              {t.explore} Profesionalce
+              {t.explore}
             </h2>
           </div>
         </div>
@@ -104,21 +153,20 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
             />
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-             <button onClick={() => setSortType('recommended')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'recommended' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
-               <Sparkles size={12} /> {t.sortRecommended}
-             </button>
-             <button onClick={() => setSortType('top-rated')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'top-rated' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
-               <Star size={12} /> {t.sortTopRated}
-             </button>
-             <button onClick={() => setSortType('price-low')} className={`shrink-0 px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 ${sortType === 'price-low' ? 'bg-[#D4AF37] text-black border-[#D4AF37]' : 'bg-zinc-950 text-zinc-500 border-white/5'}`}>
-               <ArrowDownNarrowWide size={12} /> {t.sortPriceLow}
-             </button>
-          </div>
+          <CustomSelect 
+            value={sortType} 
+            onChange={setSortType} 
+            options={[
+              {label: '⭐ Preporučeno', value: 'recommended'},
+              {label: '🔥 Najbolje ocjene', value: 'top-rated'},
+              {label: '💸 Najjeftinije', value: 'price-low'},
+              {label: '❤️ Moji Favoriti', value: 'favorites'}
+            ]} 
+          />
         </div>
       </section>
 
-      {featuredBarbers.length > 0 && searchQuery === '' && (
+      {featuredBarbers.length > 0 && searchQuery === '' && sortType !== 'favorites' && (
         <section className="space-y-5 animate-slide-up">
            <div className="flex items-center gap-2 px-1">
              <Crown size={14} className="text-[#D4AF37]" />
@@ -145,30 +193,28 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
         <div className="flex items-center gap-2 mb-2 text-left">
           <SlidersHorizontal size={14} className="text-zinc-700" />
           <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.3em]">
-            {filteredBarbers.length} {t.allProfessionals}
+            {sortType === 'favorites' ? 'Moji omiljeni barberi' : `${filteredBarbers.length} ${t.allProfessionals}`}
           </span>
         </div>
-        {filteredBarbers.map(barber => (
+        {filteredBarbers.length === 0 ? (
+          <div className="py-24 text-center opacity-20 text-[9px] font-black uppercase tracking-widest italic">
+            {sortType === 'favorites' ? 'Još niste označili niti jednog favorita' : 'Nema rezultata za vašu pretragu'}
+          </div>
+        ) : filteredBarbers.map(barber => (
           <div key={barber.id} onClick={() => onSelectBarber(barber.id)} className="cursor-pointer relative mt-3">
             {barber.weeklyWinner && (
-              <div className="absolute -top-3 -right-2 z-30 bg-[#D4AF37] p-2 rounded-xl border-2 border-black shadow-2xl animate-lux-fade">
-                <Trophy size={12} className="text-black" />
-              </div>
+              <div className="absolute -top-3 -right-2 z-30 bg-[#D4AF37] p-2 rounded-xl border-2 border-black shadow-2xl animate-lux-fade"><Trophy size={12} className="text-black" /></div>
             )}
-
-            <Card className={`flex gap-4 p-4 bg-[#0a0a0a] active:bg-zinc-950 transition-all rounded-[2.2rem] group border text-left items-start ${barber.weeklyWinner ? 'border-[#D4AF37]/40 shadow-[0_15px_50px_rgba(212,175,55,0.08)]' : 'border-white/5'}`}>
+            <Card className={`flex gap-4 p-4 bg-[#0a0a0a] active:bg-zinc-950 transition-all rounded-[2.2rem] group border text-left items-start ${barber.weeklyWinner ? 'border-[#D4AF37]/40' : 'border-white/5'}`}>
               <div className="shrink-0">
                 <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10">
                   <SafeImage src={barber.profilePicture} className="" />
                 </div>
               </div>
               <div className="flex-1 py-0.5 min-w-0 flex flex-col justify-between h-16">
-                <div className="min-w-0">
-                   <h3 className="font-black text-lg text-white tracking-tighter uppercase italic truncate leading-none w-full">{barber.fullName}</h3>
-                   <div className="flex items-center gap-2 mt-2 opacity-60">
-                      <MapPin size={9} className="text-[#D4AF37]" />
-                      <span className="text-zinc-500 text-[8px] font-black uppercase tracking-widest truncate">{barber.neighborhood}</span>
-                   </div>
+                <div className="min-w-0 flex justify-between items-start">
+                   <h3 className="font-black text-lg text-white tracking-tighter uppercase italic truncate leading-none flex-1">{barber.fullName}</h3>
+                   {favorites.includes(barber.id) && <Heart size={12} className="text-red-500 fill-red-500 shrink-0 ml-2" />}
                 </div>
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-1.5">
@@ -176,11 +222,7 @@ const CustomerHome: React.FC<CustomerHomeProps> = ({ onSelectBarber, lang }) => 
                      <span className="text-white text-[10px] font-black italic">{barber.avgRating}</span>
                      <span className="text-zinc-600 text-[8px] font-bold ml-1">({barber.reviewCount})</span>
                   </div>
-                  {barber.minPrice > 0 && (
-                    <span className="text-white text-[9px] font-black uppercase tracking-widest bg-zinc-900 px-2.5 py-1 rounded-full border border-white/5">
-                      {barber.minPrice}€
-                    </span>
-                  )}
+                  {barber.minPrice > 0 && <span className="text-white text-[9px] font-black uppercase tracking-widest bg-zinc-900 px-2.5 py-1 rounded-full border border-white/5">{barber.minPrice}€</span>}
                 </div>
               </div>
             </Card>

@@ -3,10 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../store/supabase';
 import { db } from '../../store/database';
 import { User, UserRole } from '../../types';
-import { BARBER_INVITE_CODE, ADMIN_INVITE_CODE } from '../../constants';
+import { BARBER_INVITE_CODE } from '../../constants';
 import { Button, Input, Toast } from '../../components/UI';
 import { translations, Language } from '../../translations';
-import { ArrowLeft, KeyRound, RefreshCw, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, KeyRound, RefreshCw, ShieldCheck, Loader2, AlertTriangle, Ticket } from 'lucide-react';
 
 interface RegisterScreenProps {
   onLogin: (user: any) => Promise<User | null>;
@@ -40,11 +40,14 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
     setLoading(true);
 
     let finalRole = role;
-    if (inviteCode === ADMIN_INVITE_CODE) finalRole = 'admin';
-    else if (role === 'barber' && inviteCode !== BARBER_INVITE_CODE) {
-      setError(lang === 'hr' ? 'Pogrešan barber kôd.' : 'Invalid barber code.');
-      setLoading(false);
-      return;
+    
+    // Provjera barber koda samo ako je odabrana uloga Barbera
+    if (role === 'barber') {
+      if (inviteCode !== BARBER_INVITE_CODE) {
+        setError(lang === 'hr' ? 'Pogrešan barber kôd.' : 'Invalid barber code.');
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -61,7 +64,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
 
       if (authError) throw authError;
 
-      // Supabase uspješno kreirao usera, ali ako je email_confirmed_at null, idemo na OTP
       if (data.user && !data.user.email_confirmed_at) {
         localStorage.setItem('trimly_awaiting_verification', 'true');
         localStorage.setItem('trimly_pending_email', email.trim());
@@ -72,7 +74,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
           type: 'success' 
         });
       } else if (data.user) {
-        // Mail je automatski potvrđen (ako je Supabase config takav)
         await onLogin(data.user);
       }
     } catch (err: any) {
@@ -178,7 +179,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
           <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl flex items-start gap-4 text-left">
              <AlertTriangle size={24} className="text-red-500 shrink-0" />
              <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest leading-relaxed">
-               VAŽNO: Ako kôd ne stiže, provjerite "Confirm Email" u Supabase postavkama. Supabase šalje mailove putem vašeg SMTP-a ili svog defaulta.
+               VAŽNO: Ako kôd ne stiže, provjerite "Confirm Email" u Supabase postavkama.
              </p>
           </div>
         </div>
@@ -191,16 +192,35 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onLogin, onToggle, lang
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       <div className="w-full max-w-xs space-y-10 py-10">
         <h1 className="text-4xl font-black tracking-tighter italic uppercase text-center leading-none">Trimly</h1>
-        <div className="flex bg-zinc-950 p-1.5 rounded-[2rem] border border-white/5 shadow-2xl">
-           <button type="button" onClick={() => setRole('customer')} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl ${role === 'customer' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>KLIJENT</button>
-           <button type="button" onClick={() => setRole('barber')} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl ${role === 'barber' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>BARBER</button>
+        
+        <div className="space-y-4">
+          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.3em] text-center italic">Odaberite ulogu</p>
+          <div className="flex bg-zinc-950 p-1.5 rounded-[2rem] border border-white/5 shadow-2xl">
+            <button type="button" onClick={() => setRole('customer')} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all ${role === 'customer' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>KLIJENT</button>
+            <button type="button" onClick={() => setRole('barber')} className={`flex-1 py-4 text-[8px] font-black uppercase tracking-widest rounded-2xl transition-all ${role === 'barber' ? 'bg-[#D4AF37] text-black' : 'text-zinc-700'}`}>BARBER</button>
+          </div>
         </div>
+
         <form onSubmit={handleRegister} className="space-y-6">
            {error && <div className="bg-red-500/10 text-red-500 p-4 rounded-xl text-[8px] font-black border border-red-500/20 text-center uppercase">{error}</div>}
            <div className="space-y-4">
              <Input label="Email" placeholder="ime@email.com" value={email} onChange={setEmail} required type="email" />
              <Input label={t.password} type="password" placeholder="••••••••" value={password} onChange={setPassword} required />
-             {(role === 'barber' || inviteCode.length > 0) && <Input label="Invite Kôd" placeholder="KOD..." value={inviteCode} onChange={setInviteCode} />}
+             
+             {role === 'barber' && (
+               <div className="relative group animate-lux-fade">
+                 <Input 
+                   label={lang === 'hr' ? 'Pozivni kôd za Barbera' : 'Barber Invite Code'} 
+                   placeholder="KOD..." 
+                   value={inviteCode} 
+                   onChange={setInviteCode} 
+                   required
+                 />
+                 <div className="absolute right-4 top-10 text-zinc-800">
+                   <Ticket size={16} />
+                 </div>
+               </div>
+             )}
            </div>
            <Button type="submit" loading={loading}>KREIRAJ RAČUN</Button>
         </form>

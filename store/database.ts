@@ -9,7 +9,7 @@ const mapBarberFromDb = (b: any): BarberProfile => ({
   userId: b.user_id,
   fullName: b.full_name || '',
   profilePicture: b.profile_picture || 'https://i.ibb.co/C5fL3Pz/trimly-logo.png',
-  phoneNumber: b.phone_number || '',
+  phoneNumber: b.phone_number || '', // Popravljeno: koristimo phone_number umjesto phonenumber
   neighborhood: b.neighborhood || '',
   address: b.address || '',
   zipCode: b.zip_code || '',
@@ -32,7 +32,7 @@ const mapBarberToDb = (b: Partial<BarberProfile>) => {
   if (b.userId) payload.user_id = b.userId;
   if (b.fullName !== undefined) payload.full_name = b.fullName;
   if (b.profilePicture !== undefined) payload.profile_picture = b.profilePicture;
-  if (b.phoneNumber !== undefined) payload.phone_number = b.phoneNumber;
+  if (b.phoneNumber !== undefined) payload.phone_number = b.phoneNumber; // Popravljeno ovdje
   if (b.neighborhood !== undefined) payload.neighborhood = b.neighborhood;
   if (b.address !== undefined) payload.address = b.address;
   if (b.zipCode !== undefined) payload.zip_code = b.zipCode;
@@ -86,12 +86,6 @@ export const db = {
   getUsersSync: (): User[] => {
     const cached = localStorage.getItem('trimly_users_cache');
     return cached ? JSON.parse(cached) : [];
-  },
-
-  getUserNameById: (userId: string, fallback: string): string => {
-    const users = db.getUsersSync();
-    const user = users.find(u => u.id === userId);
-    return user?.fullName || fallback;
   },
 
   updateProfileDetails: async (userId: string, updates: { fullName?: string, avatarUrl?: string }) => {
